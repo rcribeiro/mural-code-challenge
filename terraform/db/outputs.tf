@@ -1,4 +1,8 @@
 output "connection_string" {
-  value     = mongodbatlas_cluster.lightlegal_cluster.connection_strings[0]
+  value     = try(
+    data.mongodbatlas_cluster.main.connection_strings[0].standard_srv,
+    data.mongodbatlas_cluster.main.connection_strings.0.standard_srv,
+    null
+  )
   sensitive = true
 }
