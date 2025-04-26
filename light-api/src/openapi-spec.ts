@@ -1,5 +1,5 @@
 import {ApplicationConfig} from '@loopback/core';
-import {LightlegalApiApplication} from './application';
+import {LightApiApplication} from './application';
 
 /**
  * Export the OpenAPI spec from the application
@@ -12,7 +12,7 @@ async function exportOpenApiSpec(): Promise<void> {
     },
   };
   const outFile = process.argv[2] ?? '';
-  const app = new LightlegalApiApplication(config);
+  const app = new LightApiApplication(config);
   await app.boot();
   await app.exportOpenApiSpec(outFile);
 }

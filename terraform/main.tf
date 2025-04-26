@@ -15,8 +15,8 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "lightlegal-terraform-state"
-    key            = "lightlegal/terraform.tfstate"
+    bucket         = "light-terraform-state"
+    key            = "light/terraform.tfstate"
     region         = "us-east-1"
     profile        = "personal"
     dynamodb_table = "terraform-locks"
@@ -61,5 +61,5 @@ module "api" {
 # Add a local value for the MongoDB connection string
 locals {
   # Remove the database name from the URL path
-  mongodb_connection_string = "mongodb+srv://rcribeiro73:PxJiMm74GVvjxCJu@lightlegal-cluster.ei2wi8m.mongodb.net/?retryWrites=true&w=majority&appName=lightlegal-cluster"
+  mongodb_connection_string = "mongodb+srv://rcribeiro73:PxJiMm74GVvjxCJu@light-cluster.77srs6i.mongodb.net/?retryWrites=true&w=majority&appName=light-cluster"
 }

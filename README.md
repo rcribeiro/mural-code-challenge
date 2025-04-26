@@ -1,6 +1,6 @@
-# LightLegal Terraform Infrastructure
+# Light Terraform Infrastructure
 
-This folder provisions the infrastructure for the **LightLegal** platform using:
+This folder provisions the infrastructure for the **Light** platform using:
 
 - Amazon Cognito for authentication
 - AWS Lambda + API Gateway for the backend
@@ -20,7 +20,7 @@ terraform/
 ├── auth/               # Cognito user pool setup
 ├── api/                # Lambda function and API Gateway setup
 ├── db/                 # MongoDB Atlas cluster setup
-lightlegal-api/         # LoopBack 4 API source code
+light-api/         # LoopBack 4 API source code
 dist/                   # Build output directory
 ```
 
@@ -41,7 +41,7 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "tf_state" {
-  bucket = "lightlegal-terraform-state"
+  bucket = "light-terraform-state"
   force_destroy = true
 
   versioning {
@@ -69,7 +69,7 @@ resource "aws_dynamodb_table" "tf_locks" {
 }
 ```
 
-Then run:
+Go to the `terraform-backend` folder and run:
 
 ```bash
 terraform init
@@ -94,20 +94,13 @@ Or use a `.tfvars` file with the same keys.
 
 ### 3. Building the API
 
-Before deploying the infrastructure, you need to build and package the LoopBack API:
+Before deploying the infrastructure, you need to install dependencies, build the LoopBack application, and package it for deployment:
 
 1. Build the LoopBack application:
 
 ```bash
-cd lightlegal-api
-npm install
-npm run build
-```
-
-2. Create a deployment package:
-
-```bash
-npm run package
+cd light-api
+../deploy.sh
 ```
 
 ---
@@ -138,7 +131,7 @@ terraform apply
 
 Terraform state is stored remotely to support team access and prevent conflicts:
 
-- **S3 Bucket:** `lightlegal-terraform-state`
+- **S3 Bucket:** `light-terraform-state`
 - **DynamoDB Table:** `terraform-locks`
 
 ---
@@ -188,54 +181,66 @@ aws cognito-idp initiate-auth \
   --auth-parameters USERNAME=your-username,PASSWORD=your-password
 ```
 
-Save the `IdToken` from the response.
+Save the `AccessToken` from the response.
 
-### CRUD Operations
+#### CRUD Operations
+
+Pre-requisites: 
+1. Manually create a `light-cluster` in MongoDB Atlas's free tier under provider AWS in `us-east-1`. Create a database user and password.
+2. Update the `MONGODB_URI` environment variable in the `light-api` Lambda function with the MongoDB URI.
+3. Update the `mongodb_connection_string` and `mongodb_uri` in the Terraform variables with the MongoDB connection string.
 
 Use the following curl commands to test the API endpoints. Replace `YOUR_API_URL` with the API Gateway URL from the Terraform output and `YOUR_TOKEN` with the Cognito access token.
 
-#### Create a Client
+#### Create an Integration Credential
 
 ```bash
-curl -X POST https://YOUR_API_URL/clients \
+curl -X POST https://YOUR_API_URL/integration-credentials \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -d '{
-    "name": "Test Client",
-    "email": "test@example.com"
+    "providerType": "meow",
+    "accountIdentifier": "account123",
+    "credentials": {
+      "baseUrl": "https://api.example.com",
+      "apiKey": "your-api-key-123",
+      "transferApiKey": "transfer-key-456"
+    }
   }'
 ```
 
-#### Get All Clients
+#### Get All Integration Credentials
 
 ```bash
-curl -X GET https://YOUR_API_URL/clients \
+curl -X GET https://YOUR_API_URL/integration-credentials \
   -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
-#### Get a Specific Client
+#### Get a Specific Integration Credential
 
 ```bash
-curl -X GET https://YOUR_API_URL/clients/CLIENT_ID \
+curl -X GET https://YOUR_API_URL/integration-credentials/CREDENTIAL_ID \
   -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
-#### Update a Client
+#### Update an Integration Credential
 
 ```bash
-curl -X PATCH https://YOUR_API_URL/clients/CLIENT_ID \
+curl -X PATCH https://YOUR_API_URL/integration-credentials/CREDENTIAL_ID \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -d '{
-    "name": "Updated Client Name",
-    "email": "updated@example.com"
+    "credentials": {
+      "baseUrl": "https://api.updated-example.com",
+      "apiKey": "updated-api-key-789"
+    }
   }'
 ```
 
-#### Delete a Client
+#### Delete an Integration Credential
 
 ```bash
-curl -X DELETE https://YOUR_API_URL/clients/CLIENT_ID \
+curl -X DELETE https://YOUR_API_URL/integration-credentials/CREDENTIAL_ID \
   -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
@@ -247,8 +252,8 @@ Check CloudWatch Logs for Lambda function errors:
 
 ```bash
 aws logs get-log-events \
-  --log-group-name /aws/lambda/lightlegal-api \
-  --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/lightlegal-api --order-by LastEventTime --descending --limit 1 --query 'logStreams[0].logStreamName' --output text)
+  --log-group-name /aws/lambda/light-api \
+  --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/light-api --order-by LastEventTime --descending --limit 1 --query 'logStreams[0].logStreamName' --output text)
 ```
 
 ### API Gateway Logs
@@ -275,9 +280,9 @@ Verify the MongoDB connection string in the Lambda environment variables.
 
 ### API Implementation Details
 
-The LightLegal API is built with LoopBack 4, a modern API framework for Node.js. Key components include:
+The Light API is built with LoopBack 4, a modern API framework for Node.js. Key components include:
 
-1. **Models**: Define the data structures (e.g., Client model)
+1. **Models**: Define the data structures (e.g., IntegrationCredential model)
 2. **Repositories**: Handle data access to MongoDB
 3. **Controllers**: Implement the REST API endpoints
 4. **Authentication**: Integration with Cognito for secure access
@@ -289,7 +294,7 @@ The Lambda function uses a custom Express setup to properly handle API Gateway r
 ```typescript
 import {APIGatewayProxyHandlerV2} from 'aws-lambda';
 import {Express} from 'express';
-import {LightlegalApiApplication} from './application';
+import {LightApiApplication} from './application';
 import serverlessExpress from '@vendia/serverless-express';
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -304,7 +309,7 @@ async function bootstrap() {
   expressApp.use(bodyParser.json());
   expressApp.use(bodyParser.urlencoded({ extended: true }));
   
-  const lbApp = new LightlegalApiApplication({
+  const lbApp = new LightApiApplication({
     rest: {
       port: 0,
       host: '127.0.0.1',

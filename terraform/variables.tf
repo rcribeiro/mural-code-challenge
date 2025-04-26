@@ -1,6 +1,6 @@
 variable "project_name" {
   type    = string
-  default = "lightlegal"
+  default = "light"
 }
 
 variable "aws_region" {

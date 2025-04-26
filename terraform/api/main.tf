@@ -46,8 +46,8 @@ resource "aws_cloudwatch_log_group" "lambda_log_group" {
 
 # Check if the zip file exists
 locals {
-  lambda_zip_exists = fileexists("${path.module}/../../lightlegal-api/lambda.zip")
-  source_code_hash = local.lambda_zip_exists ? filebase64sha256("${path.module}/../../lightlegal-api/lambda.zip") : ""
+  lambda_zip_exists = fileexists("${path.module}/../../light-api/lambda.zip")
+  source_code_hash = local.lambda_zip_exists ? filebase64sha256("${path.module}/../../light-api/lambda.zip") : ""
 }
 
 resource "aws_lambda_function" "loopback_api" {
@@ -57,7 +57,7 @@ resource "aws_lambda_function" "loopback_api" {
   runtime          = "nodejs18.x"
   
   # Use a placeholder zip file if the actual one doesn't exist
-  filename         = local.lambda_zip_exists ? "${path.module}/../../lightlegal-api/lambda.zip" : "${path.module}/placeholder.zip"
+  filename         = local.lambda_zip_exists ? "${path.module}/../../light-api/lambda.zip" : "${path.module}/placeholder.zip"
   source_code_hash = local.source_code_hash
   
   # Increase memory and timeout for better performance

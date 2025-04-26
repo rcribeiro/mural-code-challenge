@@ -6,9 +6,9 @@ import * as jwt from 'jsonwebtoken';
 const jwksClient = require('jwks-rsa');
 
 const REGION = 'us-east-1';
-const USER_POOL_ID = 'us-east-1_xLn6qcvLN'; 
+const USER_POOL_ID = 'us-east-1_1XNcvcXuy'; 
 const ISSUER = `https://cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`;
-const CLIENT_ID = '2v20v72sgtlrf1fu95okkmgt6t';
+const CLIENT_ID = '6ahma0lfdi0plqgoc76ddnjm21';
 
 const client = jwksClient({
   jwksUri: `${ISSUER}/.well-known/jwks.json`,

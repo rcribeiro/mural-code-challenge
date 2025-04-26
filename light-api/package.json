@@ -1,7 +1,7 @@
 {
-  "name": "lightlegal-api",
+  "name": "light-api",
   "version": "0.0.1",
-  "description": "lightlegal-api",
+  "description": "light-api",
   "keywords": [
     "loopback-application",
     "loopback"
@@ -26,8 +26,8 @@
     "test": "lb-mocha --allow-console-logs \"dist/__tests__\"",
     "posttest": "yarn run lint",
     "test:dev": "lb-mocha --allow-console-logs dist/__tests__/**/*.js && yarn run posttest",
-    "docker:build": "docker build -t lightlegal-api .",
-    "docker:run": "docker run -p 3000:3000 -d lightlegal-api",
+    "docker:build": "docker build -t light-api .",
+    "docker:run": "docker run -p 3000:3000 -d light-api",
     "premigrate": "yarn run build",
     "migrate": "node ./dist/migrate",
     "preopenapi-spec": "yarn run build",
@@ -61,6 +61,7 @@
     "@types/aws-lambda": "^8.10.149",
     "@vendia/serverless-express": "^4.12.6",
     "aws-serverless-express": "^3.4.0",
+    "axios": "^1.9.0",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.0",
     "loopback-connector-mongodb": "^6.3.1",

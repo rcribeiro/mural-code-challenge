@@ -1,6 +1,6 @@
 import {APIGatewayProxyHandlerV2} from 'aws-lambda';
 import {Express} from 'express';
-import {LightlegalApiApplication} from './application';
+import {LightApiApplication} from './application';
 import serverlessExpress from '@vendia/serverless-express';
 import express from 'express';
 import bodyParser from 'body-parser';
@@ -15,7 +15,7 @@ async function bootstrap() {
   expressApp.use(bodyParser.json());
   expressApp.use(bodyParser.urlencoded({ extended: true }));
   
-  const lbApp = new LightlegalApiApplication({
+  const lbApp = new LightApiApplication({
     rest: {
       port: 0,
       host: '127.0.0.1',

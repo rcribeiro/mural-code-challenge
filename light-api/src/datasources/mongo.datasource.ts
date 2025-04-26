@@ -5,7 +5,7 @@ const config = {
   name: 'mongo',
   connector: 'mongodb',
   url: process.env.MONGODB_URI,
-  database: 'lightlegal',
+  database: 'light',
   useNewUrlParser: true,
   useUnifiedTopology: true,
   connectTimeoutMS: 30000,

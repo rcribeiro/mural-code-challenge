@@ -4,7 +4,7 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "tf_state" {
-  bucket        = "lightlegal-terraform-state"
+  bucket        = "light-terraform-state"
   force_destroy = true
 
   versioning {
