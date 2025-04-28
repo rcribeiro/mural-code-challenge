@@ -23,3 +23,18 @@ output "frontend_cloudfront_domain" {
   value = module.frontend.cloudfront_domain
   description = "The CloudFront distribution domain name for the frontend"
 }
+
+output "frontend_bucket_name" {
+  description = "The name of the S3 bucket hosting the frontend"
+  value       = module.frontend.bucket_name
+}
+
+output "frontend_bucket_website_endpoint" {
+  description = "The website endpoint URL of the S3 bucket"
+  value       = module.frontend.bucket_website_endpoint
+}
+
+output "cloudfront_distribution_domain_name" {
+  description = "The domain name of the CloudFront distribution"
+  value       = module.frontend.cloudfront_domain
+}
