@@ -394,6 +394,27 @@ export class MuralProvider implements MuralServiceProvider {
         throw new HttpErrors.Forbidden('Authentication failed with Mural API');
       } else if (status === 404) {
         throw new HttpErrors.NotFound('Resource not found in Mural API');
+      } else if (status === 429 || 
+                (status === 500 && 
+                 error.response?.data?.message?.includes('ThrottlerException'))) {
+        
+        // Get retry-after time from headers if available
+        const retryAfter = error.response.headers['retry-after-api'] || '30';
+        
+        // Create a custom error with rate limit information
+        const rateLimitError = new Error('Rate limit exceeded') as Error & { 
+          status: number; 
+          headers: Record<string, string>;
+          code: string;
+        };
+        rateLimitError.status = 429;
+        rateLimitError.code = 'RATE_LIMIT_EXCEEDED';
+        rateLimitError.headers = {
+          'Retry-After': retryAfter,
+          'X-Rate-Limit-Exceeded': 'true'
+        };
+        
+        throw rateLimitError;
       } else {
         throw new HttpErrors.InternalServerError(`Mural API error: ${message}`);
       }

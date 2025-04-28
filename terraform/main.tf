@@ -47,6 +47,11 @@ module "api" {
   client_id    = module.auth.user_pool_client_id
   aws_region   = var.aws_region
   mongodb_uri  = local.mongodb_connection_string
+  
+  # Pass the CloudFront domain to the API module
+  # Use depends_on to ensure the frontend module is created first
+  depends_on = [module.frontend]
+  cloudfront_domain = module.frontend.cloudfront_domain
 }
 
 # Comment out the MongoDB module
@@ -62,4 +67,10 @@ module "api" {
 locals {
   # Remove the database name from the URL path
   mongodb_connection_string = "mongodb+srv://rcribeiro73:PxJiMm74GVvjxCJu@light-cluster.77srs6i.mongodb.net/?retryWrites=true&w=majority&appName=light-cluster"
+}
+
+module "frontend" {
+  source       = "./frontend"
+  project_name = var.project_name
+  aws_region   = var.aws_region
 }

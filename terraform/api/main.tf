@@ -75,6 +75,17 @@ resource "aws_lambda_function" "loopback_api" {
       MONGODB_URI  = var.mongodb_uri
       DEBUG        = "*"
       NODE_ENV     = "production"
+      
+      # Add CORS configuration as environment variables
+      CORS_ALLOWED_ORIGINS = join(",", compact([
+        "http://localhost:3000", 
+        var.cloudfront_domain != "" ? "https://${var.cloudfront_domain}" : ""
+      ]))
+      CORS_ALLOWED_METHODS = "GET,POST,PUT,DELETE,OPTIONS,HEAD,PATCH"
+      CORS_ALLOWED_HEADERS = "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token"
+      CORS_EXPOSED_HEADERS = "Content-Type,Authorization"
+      CORS_ALLOW_CREDENTIALS = "true"
+      CORS_MAX_AGE = "300"
     }
   }
 }
@@ -94,11 +105,13 @@ resource "aws_apigatewayv2_api" "http_api" {
   name          = "${var.project_name}-http-api"
   protocol_type = "HTTP"
   
-  # Enable detailed CloudWatch logging
+  # Either remove CORS configuration entirely and handle it in Lambda
+  # or use a simple configuration that passes through OPTIONS requests
   cors_configuration {
     allow_origins = ["*"]
     allow_methods = ["*"]
     allow_headers = ["*"]
+    allow_credentials = false
   }
 }
 

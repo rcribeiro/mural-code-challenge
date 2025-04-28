@@ -19,3 +19,9 @@ variable "mongodb_uri" {
   type        = string
   default     = ""  # Default to empty string
 }
+
+variable "cloudfront_domain" {
+  description = "The CloudFront distribution domain name for the frontend"
+  type        = string
+  default     = ""  # Default to empty string in case it's not provided
+}

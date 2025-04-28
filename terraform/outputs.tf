@@ -14,3 +14,12 @@ output "mongodb_cluster_connection_string" {
   value     = local.mongodb_connection_string
   sensitive = true
 }
+
+output "frontend_website_endpoint" {
+  value = module.frontend.website_endpoint
+}
+
+output "frontend_cloudfront_domain" {
+  value = module.frontend.cloudfront_domain
+  description = "The CloudFront distribution domain name for the frontend"
+}

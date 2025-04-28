@@ -27,3 +27,9 @@ variable "mongodb_private_key" {
   type        = string
   description = "MongoDB Atlas private API key"
 }
+
+variable "mongodb_uri" {
+  description = "MongoDB connection string"
+  type        = string
+  sensitive   = true
+}
