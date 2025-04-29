@@ -175,7 +175,7 @@ export const muralPayApi = {
   // Transaction endpoints
   getTransactions: throttle((accountIdentifier: string, accountId: string, organizationId?: string) => 
     apiRequest(() => api.post(`/mural/${accountIdentifier}/transactions/search/account/${accountId}`, 
-      { filter: {}, limit: 20 },
+      { filter: {}, limit: 100 },
       {
         headers: organizationId ? { 'on-behalf-of': organizationId } : undefined
       }
@@ -199,7 +199,7 @@ export const muralPayApi = {
     apiRequest(() => api.post(`/mural/${accountIdentifier}/payouts/search`, 
       { 
         filter: { sourceAccountId: accountId },
-        limit: 20 
+        limit: 100 
       },
       {
         headers: organizationId ? { 'on-behalf-of': organizationId } : undefined

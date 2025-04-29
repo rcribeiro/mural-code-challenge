@@ -60,6 +60,7 @@ interface CustomerStats {
 }
 
 interface Customer {
+  kycStatus: any;
   id: string;
   type: 'individual' | 'business';
   name?: string;
@@ -191,7 +192,6 @@ const DashboardPage: React.FC = () => {
     const customerId = event.target.value as string;
     payoutSelectionFormik.setFieldValue('customerId', customerId);
     payoutSelectionFormik.setFieldValue('accountId', ''); // Reset account selection
-    
     if (customerId) {
       await fetchCustomerAccounts(customerId);
       setActiveStep(1); // Move to account selection step
@@ -220,30 +220,64 @@ const DashboardPage: React.FC = () => {
     setSelectedCustomerAccounts([]);
   };
 
+  // Function to fetch all customers with pagination
+  const fetchAllCustomers = async () => {
+    try {
+      let allCustomers: Customer[] = [];
+      let nextId: string | undefined = undefined;
+      let hasMore = true;
+      
+      // Keep fetching until we have all customers
+      while (hasMore) {
+        const response: { data: any } = await muralPayApi.getCustomers(accountIdentifier, {}, 100, nextId);
+        
+        let newCustomers: Customer[] = [];
+        
+        if (Array.isArray(response.data)) {
+          newCustomers = response.data;
+        } else if (response.data && typeof response.data === 'object') {
+          if (Array.isArray(response.data.customers)) {
+            newCustomers = response.data.customers;
+            nextId = response.data.nextId;
+          } else if (Array.isArray(response.data.data)) {
+            newCustomers = response.data.data;
+            nextId = response.data.nextId || response.data.next;          } else if (Array.isArray(response.data.items)) {
+            newCustomers = response.data.items;
+            nextId = response.data.nextId;
+          } else if (Array.isArray(response.data.results)) {
+            newCustomers = response.data.results;
+            nextId = response.data.nextId;
+          }
+        }
+        
+        // Add new customers to our collection, avoiding duplicates
+        const existingIds = new Set(allCustomers.map(c => c.id));
+        const uniqueNewCustomers = newCustomers.filter(c => !existingIds.has(c.id));
+        allCustomers = [...allCustomers, ...uniqueNewCustomers];
+        
+        // Check if we need to continue fetching
+        hasMore = !!nextId && newCustomers.length > 0;
+        
+        // If we've fetched a lot of customers already, break to avoid infinite loops
+        if (allCustomers.length > 1000) {
+          console.warn('Stopped fetching customers after reaching 1000 records');
+          break;
+        }
+      }
+      
+      return allCustomers;
+    } catch (error) {
+      console.error('Error fetching all customers:', error);
+      throw error;
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch customers
-        const customersResponse = await muralPayApi.getCustomers(accountIdentifier);
-        console.log('Dashboard customers response:', customersResponse.data);
-        
-        // Extract customer data and calculate stats
-        let customersData: any[] = [];
-        
-        if (Array.isArray(customersResponse.data)) {
-          customersData = customersResponse.data;
-        } else if (customersResponse.data && typeof customersResponse.data === 'object') {
-          // Check for common container properties
-          if (Array.isArray(customersResponse.data.customers)) {
-            customersData = customersResponse.data.customers;
-          } else if (Array.isArray(customersResponse.data.data)) {
-            customersData = customersResponse.data.data;
-          } else if (Array.isArray(customersResponse.data.items)) {
-            customersData = customersResponse.data.items;
-          } else if (Array.isArray(customersResponse.data.results)) {
-            customersData = customersResponse.data.results;
-          }
-        }
+        // Fetch all customers with pagination
+        const customersData = await fetchAllCustomers();
+        console.log('Dashboard fetched customers:', customersData.length);
         
         setCustomers(customersData);
         
