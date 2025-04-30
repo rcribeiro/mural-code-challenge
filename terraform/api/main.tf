@@ -54,7 +54,7 @@ resource "aws_lambda_function" "loopback_api" {
   function_name    = "${var.project_name}-api"
   role             = aws_iam_role.lambda_exec_role.arn
   handler          = "index.handler"
-  runtime          = "nodejs18.x"
+  runtime          = "nodejs22.x"
   
   # Use a placeholder zip file if the actual one doesn't exist
   filename         = local.lambda_zip_exists ? "${path.module}/../../light-api/lambda.zip" : "${path.module}/placeholder.zip"
