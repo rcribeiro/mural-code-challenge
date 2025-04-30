@@ -1,28 +1,54 @@
-# Light Terraform Infrastructure
+# Mural Light: Serverless Payment Management Platform
 
-This folder provisions the infrastructure for the **Light** platform using:
+This repository contains the infrastructure and application code for **Mural Light**, a modern serverless payment management platform built with:
 
-- Amazon Cognito for authentication
-- AWS Lambda + API Gateway for the backend
-- MongoDB Atlas for data storage
-- S3 + DynamoDB for storing Terraform remote state
+- **Frontend**: React + TypeScript (Single-Page Application)
+- **Backend**: AWS Lambda + API Gateway with LoopBack 4
+- **Authentication**: Amazon Cognito
+- **Database**: MongoDB Atlas (serverless)
+- **Infrastructure**: Terraform IaC (Infrastructure as Code)
+- **CDN**: Amazon CloudFront for global content delivery
+
+Mural Light demonstrates a complete serverless architecture that scales automatically, follows pay-per-use pricing, and requires minimal operational overhead.
 
 ---
 
 ## 📁 Project Structure
 
 ```
-terraform/
-├── main.tf             # Root module wiring all submodules
-├── variables.tf        # Global input variables
-├── outputs.tf          # Global output values
-├── provider.tf         # AWS + MongoDB provider setup
-├── auth/               # Cognito user pool setup
-├── api/                # Lambda function and API Gateway setup
-├── db/                 # MongoDB Atlas cluster setup
-light-api/         # LoopBack 4 API source code
-dist/                   # Build output directory
+mural-light/
+├── terraform/              # Infrastructure as Code
+│   ├── main.tf             # Root module wiring all submodules
+│   ├── variables.tf        # Global input variables
+│   ├── outputs.tf          # Global output values
+│   ├── provider.tf         # AWS + MongoDB provider setup
+│   ├── auth/               # Cognito user pool setup
+│   ├── api/                # Lambda function and API Gateway setup
+│   ├── db/                 # MongoDB Atlas cluster setup
+│   └── frontend/           # S3 + CloudFront distribution setup
+├── light-api/              # LoopBack 4 API source code
+│   ├── src/                # API source files
+│   ├── dist/               # Build output directory
+│   └── package.json        # Node.js dependencies
+├── light-frontend/         # React frontend application
+│   ├── src/                # React components and logic
+│   ├── public/             # Static assets
+│   └── package.json        # Node.js dependencies
+├── deploy.sh               # Deployment automation script
+└── README.md               # This documentation
 ```
+
+---
+
+## 🌟 Key Features
+
+- **Fully Serverless Architecture**: Zero server management with automatic scaling
+- **Real-time Currency Conversion**: Integration with external exchange rate API
+- **Secure Authentication**: Enterprise-grade identity management via Cognito
+- **Global Content Delivery**: CloudFront CDN for low-latency worldwide access
+- **Infrastructure as Code**: Complete Terraform automation for consistent deployments
+- **Cost Optimization**: Resources scale to zero during periods of inactivity
+- **Document Database**: Flexible data model with MongoDB Atlas
 
 ---
 
@@ -92,15 +118,30 @@ Or use a `.tfvars` file with the same keys.
 
 ---
 
-### 3. Building the API
+### 3. Building the API and Frontend
 
-Before deploying the infrastructure, you need to install dependencies, build the LoopBack application, and package it for deployment:
+Before deploying the infrastructure, you need to build both the backend and frontend applications:
 
-1. Build the LoopBack application:
+1. Build the LoopBack API:
 
 ```bash
 cd light-api
-../deploy.sh
+npm install
+npm run build
+```
+
+2. Build the React frontend:
+
+```bash
+cd light-frontend
+npm install
+npm run build
+```
+
+Alternatively, use the deployment script which handles both builds:
+
+```bash
+./deploy.sh
 ```
 
 ---
@@ -120,10 +161,13 @@ terraform apply
 
 ### 5. Outputs You'll Receive
 
+After successful deployment, you'll get these important outputs:
+
 - `user_pool_id` – Cognito User Pool ID
 - `user_pool_client_id` – Cognito App Client ID
 - `api_gateway_url` – API Gateway public endpoint
 - `mongodb_cluster_connection_string` – MongoDB URI for backend
+- `cloudfront_distribution_domain` – Your frontend application URL
 
 ---
 
@@ -136,23 +180,24 @@ Terraform state is stored remotely to support team access and prevent conflicts:
 
 ---
 
-## 🧼 Destroy the Infrastructure
+## 🧪 Testing the Application
 
-If you want to clean everything up:
+### 1. Register a New User
 
-```bash
-terraform destroy
-```
+Visit the CloudFront URL from the Terraform outputs and register a new user. You'll receive a verification code via email.
 
-> Warning: This will permanently delete all resources provisioned.
+### 2. Log In and Explore
 
----
+After verifying your account, log in to explore the payment management interface:
+- Create and manage payment integrations
+- View transaction history
+- Convert currencies using real-time exchange rates
 
-## 🧪 Testing the API
+### 3. API Testing
 
-### Authentication
+For direct API testing, use the following curl commands. Replace `YOUR_API_URL` with the API Gateway URL from the Terraform output and `YOUR_TOKEN` with the Cognito access token.
 
-First, you need to create a user in the Cognito User Pool and obtain an access token:
+#### Authentication
 
 1. Create a user:
 
@@ -181,16 +226,9 @@ aws cognito-idp initiate-auth \
   --auth-parameters USERNAME=your-username,PASSWORD=your-password
 ```
 
-Save the `AccessToken` from the response.
-
 #### CRUD Operations
 
-Pre-requisites: 
-1. Manually create a `light-cluster` in MongoDB Atlas's free tier under provider AWS in `us-east-1`. Create a database user and password.
-2. Update the `MONGODB_URI` environment variable in the `light-api` Lambda function with the MongoDB URI.
-3. Update the `mongodb_connection_string` and `mongodb_uri` in the Terraform variables with the MongoDB connection string.
-
-Use the following curl commands to test the API endpoints. Replace `YOUR_API_URL` with the API Gateway URL from the Terraform output and `YOUR_TOKEN` with the Cognito access token.
+Test the API endpoints with the following curl commands:
 
 #### Create an Integration Credential
 
@@ -216,33 +254,75 @@ curl -X GET https://YOUR_API_URL/integration-credentials \
   -H 'Authorization: Bearer YOUR_TOKEN'
 ```
 
-#### Get a Specific Integration Credential
+---
+
+## 🧼 Cleaning Up
+
+If you want to clean everything up:
 
 ```bash
-curl -X GET https://YOUR_API_URL/integration-credentials/CREDENTIAL_ID \
-  -H 'Authorization: Bearer YOUR_TOKEN'
+terraform destroy
 ```
 
-#### Update an Integration Credential
+> Warning: This will permanently delete all resources provisioned.
+
+---
+
+## 🔍 Architecture Overview
+
+### Frontend Architecture
+
+The React frontend implements:
+- **Component-based UI**: Reusable UI elements for consistent design
+- **State Management**: Efficient data flow and component updates
+- **Responsive Design**: Mobile-first approach for all screen sizes
+- **Authentication Flow**: Seamless integration with Cognito
+- **API Integration**: Secure communication with the backend
+
+### Backend Architecture
+
+The LoopBack 4 API provides:
+- **RESTful Endpoints**: Clean API design following REST principles
+- **Data Validation**: Input validation and error handling
+- **Authentication Middleware**: Cognito token verification
+- **MongoDB Integration**: Document-based data persistence
+- **External API Integration**: Currency conversion service
+
+### Infrastructure Architecture
+
+The serverless architecture eliminates the need for server provisioning while providing enterprise-grade scalability:
+
+- **Frontend**: Static assets hosted on S3, distributed via CloudFront CDN
+- **API Layer**: Lambda functions exposed through API Gateway
+- **Authentication**: Cognito user pools for identity management
+- **Database**: MongoDB Atlas serverless cluster
+- **State Management**: Terraform state in S3 with DynamoDB locking
+
+This architecture delivers enterprise-grade functionality without traditional infrastructure costs, making it ideal for payment processing at any scale.
+
+---
+
+## 🔍 Troubleshooting
+
+### Lambda Logs
+
+Check CloudWatch Logs for Lambda function errors:
 
 ```bash
-curl -X PATCH https://YOUR_API_URL/integration-credentials/CREDENTIAL_ID \
-  -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_TOKEN' \
-  -d '{
-    "credentials": {
-      "baseUrl": "https://api.updated-example.com",
-      "apiKey": "updated-api-key-789"
-    }
-  }'
+aws logs get-log-events \
+  --log-group-name /aws/lambda/light-api \
+  --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/light-api --order-by LastEventTime --descending --limit 1 --query 'logStreams[0].logStreamName' --output text)
 ```
 
-#### Delete an Integration Credential
+### API Gateway Logs
 
-```bash
-curl -X DELETE https://YOUR_API_URL/integration-credentials/CREDENTIAL_ID \
-  -H 'Authorization: Bearer YOUR_TOKEN'
-```
+Enable and check API Gateway execution logs in CloudWatch.
+
+### MongoDB Connection
+
+Verify the MongoDB connection string in the Lambda environment variables.
+
+---
 
 ## 🔍 Troubleshooting
 
@@ -363,4 +443,4 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
 - [MongoDB Atlas Documentation](https://docs.atlas.mongodb.com/)
 - [Terraform Documentation](https://www.terraform.io/docs)
 - [Cognito User Pools Documentation](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools.html)
-
+- [React Documentation](https://reactjs.org/docs/getting-started.html)
