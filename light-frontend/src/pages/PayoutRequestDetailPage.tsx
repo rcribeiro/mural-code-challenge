@@ -67,9 +67,25 @@ const PayoutRequestDetailPage: React.FC = () => {
       try {
         setLoading(true);
         
-        // Fetch payout request details
-        const response = await muralPayApi.getPayoutRequest(accountIdentifier, accountId!, payoutRequestId!, customerId);
-        setPayoutRequest(response.data);
+        // Fetch payout request details using the proxy endpoint
+        const response = await muralPayApi.getPayoutRequest(accountIdentifier, payoutRequestId!, customerId);
+        
+        // Check if the response has a results array
+        if (response.data && response.data.results && Array.isArray(response.data.results)) {
+          // Find the specific payout request by ID
+          const foundPayoutRequest = response.data.results.find(
+            (pr: any) => pr.id === payoutRequestId
+          );
+          
+          if (foundPayoutRequest) {
+            setPayoutRequest(foundPayoutRequest);
+          } else {
+            setError('Payout request not found in the results');
+          }
+        } else {
+          // If it's a direct object, use it as is
+          setPayoutRequest(response.data);
+        }
         
         setError(null);
       } catch (err: any) {
@@ -79,7 +95,6 @@ const PayoutRequestDetailPage: React.FC = () => {
         setLoading(false);
       }
     };
-    
     if (customerId && accountId && payoutRequestId) {
       fetchData();
     }
@@ -96,21 +111,40 @@ const PayoutRequestDetailPage: React.FC = () => {
   const handleExecutePayout = async () => {
     try {
       setExecuteLoading(true);
-      await muralPayApi.executePayoutRequest(accountIdentifier, accountId!, payoutRequestId!, customerId);
+      
+      await muralPayApi.executePayoutRequest(accountIdentifier, payoutRequestId!, customerId!);
       
       // Refresh the payout request data
-      const response = await muralPayApi.getPayoutRequest(accountIdentifier, accountId!, payoutRequestId!, customerId);
-      setPayoutRequest(response.data);
+      const response = await muralPayApi.getPayoutRequest(accountIdentifier, payoutRequestId!, customerId);
+      
+      // Handle the response format
+      if (response.data && response.data.results && Array.isArray(response.data.results)) {
+        const foundPayoutRequest = response.data.results.find(
+          (pr: any) => pr.id === payoutRequestId
+        );
+        
+        if (foundPayoutRequest) {
+          setPayoutRequest(foundPayoutRequest);
+        }
+      } else {
+        setPayoutRequest(response.data);
+      }
       
       setExecuteDialogOpen(false);
     } catch (err: any) {
+      console.error('Error executing payout request:', err);
       setError(err.message || 'Failed to execute payout request');
     } finally {
       setExecuteLoading(false);
     }
   };
 
-  const getStatusChip = (status: string) => {
+  const getStatusChip = (status: string | undefined) => {
+    // Handle undefined status
+    if (!status) {
+      return <Chip label="Unknown" color="default" size="small" />;
+    }
+    
     let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
     
     switch (status.toLowerCase()) {
@@ -121,6 +155,7 @@ const PayoutRequestDetailPage: React.FC = () => {
       case 'awaiting_execution':
       case 'pending':
       case 'processing':
+      case 'created':
         color = 'warning';
         break;
       case 'failed':
@@ -278,10 +313,10 @@ const PayoutRequestDetailPage: React.FC = () => {
                 Payout Status
               </Typography>
               <Box sx={{ mt: 1 }}>
-                {getStatusChip(payoutItem.details.fiatPayoutStatus.type)}
+                {getStatusChip(payoutItem.details.fiatPayoutStatus?.type)}
               </Box>
             </Grid>
-            {payoutItem.details.fiatPayoutStatus.completedAt && (
+            {payoutItem.details.fiatPayoutStatus?.completedAt && (
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Completed At

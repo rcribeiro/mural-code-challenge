@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -11,6 +11,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Chip,
   CircularProgress,
   Alert,
   Dialog,
@@ -18,237 +19,119 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Chip,
-  MenuItem,
-  Select,
   FormControl,
   InputLabel,
-  FormHelperText,
+  Select,
+  MenuItem,
   TablePagination,
-  InputAdornment,
+  InputAdornment
 } from '@mui/material';
 import { Add as AddIcon, Search as SearchIcon } from '@mui/icons-material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import MainLayout from '../components/layout/MainLayout';
 import { muralPayApi } from '../services/api';
+import debounce from 'lodash/debounce';
 
 interface Customer {
   id: string;
-  type: 'individual' | 'business';
+  type: string;
   name?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
+  kycStatus: string;
   createdAt: string;
   updatedAt: string;
-  kycStatus?: {
-    type: string;
-  };
 }
 
 const CustomersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [customerType, setCustomerType] = useState<'individual' | 'business'>('individual');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Pagination state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-  const [nextId, setNextId] = useState<string | undefined>(undefined);
-  const [hasMore, setHasMore] = useState(true);
-  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
-  
-  // Search state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<Customer[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [isServerSearching, setIsServerSearching] = useState(false);
 
-  const accountIdentifier = process.env.REACT_APP_ACCOUNT_IDENTIFIER || 'light';
+  const accountIdentifier = process.env.REACT_APP_ACCOUNT_IDENTIFIER || '';
 
-  const fetchCustomers = async (reset = false) => {
+  const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
       
-      // Reset pagination if requested
-      if (reset) {
-        setPage(0);
-        setNextId(undefined);
-        setAllCustomers([]);
-      }
+      const customersData = await muralPayApi.getAllCustomers(accountIdentifier);
       
-      // Create filter object for search
-      const filter: any = {};
-      if (searchTerm && isServerSearching) {
-        // Add search filters for name, email, etc.
-        filter.$or = [
-          { name: { $contains: searchTerm } },
-          { firstName: { $contains: searchTerm } },
-          { lastName: { $contains: searchTerm } },
-          { email: { $contains: searchTerm } }
-        ];
-      }
+      const processedCustomers = customersData.map((customer: any) => ({
+        ...customer,
+        name: customer.type === 'individual' 
+          ? `${customer.firstName} ${customer.lastName}`
+          : customer.name || customer.businessName
+      }));
       
-      const response = await muralPayApi.getCustomers(
-        accountIdentifier, 
-        filter, 
-        rowsPerPage, 
-        reset ? undefined : nextId
-      );
-      
-      let newCustomers: Customer[] = [];
-      let newNextId: string | undefined = undefined;
-      let count = 0;
-      
-      if (Array.isArray(response.data)) {
-        newCustomers = response.data;
-        count = response.headers['x-total-count'] ? parseInt(response.headers['x-total-count'], 10) : newCustomers.length;
-      } 
-      else if (response.data && typeof response.data === 'object') {
-        if (Array.isArray(response.data.customers)) {
-          newCustomers = response.data.customers;
-          newNextId = response.data.nextId;
-          count = response.data.totalCount || response.data.count || newCustomers.length;
-        } else if (Array.isArray(response.data.data)) {
-          newCustomers = response.data.data;
-          newNextId = response.data.nextId || response.data.next;
-          count = response.data.totalCount || response.data.count || newCustomers.length;
-        } else if (Array.isArray(response.data.items)) {
-          newCustomers = response.data.items;
-          newNextId = response.data.nextId;
-          count = response.data.totalCount || response.data.count || newCustomers.length;
-        } else if (Array.isArray(response.data.results)) {
-          newCustomers = response.data.results;
-          newNextId = response.data.nextId;
-          count = response.data.totalCount || response.data.count || newCustomers.length;
-        } else {
-          console.error('Unexpected API response structure:', response.data);
-          newCustomers = [];
-          setError('Unexpected data format received from API');
-        }
-      } else {
-        console.error('Invalid API response:', response.data);
-        newCustomers = [];
-        setError('Invalid data received from API');
-      }
-      
-      // If we have a nextId, we know there are more records than what we received
-      if (newNextId && count <= newCustomers.length) {
-        count = newCustomers.length + 1; // At minimum, there's at least one more
-      }
-      
-      setTotalCount(count);
-      
-      // Update state with new data
-      if (reset) {
-        setAllCustomers(newCustomers);
-      } else {
-        // Ensure we don't duplicate customers by checking IDs
-        const existingIds = new Set(allCustomers.map(c => c.id));
-        const uniqueNewCustomers = newCustomers.filter(c => !existingIds.has(c.id));
-        setAllCustomers(prev => [...prev, ...uniqueNewCustomers]);
-      }
-      
-      setNextId(newNextId);
-      setHasMore(!!newNextId && newCustomers.length > 0);
-      
+      setCustomers(processedCustomers);
+      setFilteredCustomers(processedCustomers);
+      setTotalCount(processedCustomers.length);
+      setError(null);
     } catch (err: any) {
-      console.error('API Error:', err);
+      console.error('Error fetching customers:', err);
       setError(err.message || 'Failed to fetch customers');
-      setAllCustomers([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [accountIdentifier]);
 
-  // Effect to update displayed customers based on pagination
   useEffect(() => {
-    if (isSearching && !isServerSearching) {
-      // When searching client-side, use the search results
-      const start = page * rowsPerPage;
-      const end = start + rowsPerPage;
-      setCustomers(searchResults.slice(start, Math.min(end, searchResults.length)));
-    } else {
-      // When not searching or server-side searching, use the paginated results from API
-      const start = page * rowsPerPage;
-      const end = start + rowsPerPage;
-      setCustomers(allCustomers.slice(start, Math.min(end, allCustomers.length)));
-      
-      // If we're near the end of our loaded data and there's more to fetch, load more
-      if (allCustomers.length <= (page + 1) * rowsPerPage && hasMore && !loading) {
-        fetchCustomers(false);
+    fetchCustomers();
+  }, [fetchCustomers]);
+
+  // Efficient search with debounce
+  const debouncedSearch = useCallback(
+    debounce((term: string) => {
+      if (!term.trim()) {
+        setFilteredCustomers(customers);
+        setTotalCount(customers.length);
+        return;
       }
-    }
-  }, [page, rowsPerPage, allCustomers, searchResults, isSearching, isServerSearching, hasMore, loading]);
-
-  // Initial data fetch
-  useEffect(() => {
-    fetchCustomers(true);
-  }, [rowsPerPage]);
-
-  // Handle search
-  useEffect(() => {
-    if (searchTerm && !isServerSearching) {
-      setIsSearching(true);
-      // Simple client-side search through already loaded customers
-      const results = allCustomers.filter(customer => {
-        const name = getCustomerName(customer).toLowerCase();
-        const email = (customer.email || '').toLowerCase();
-        const term = searchTerm.toLowerCase();
-        
-        return name.includes(term) || email.includes(term);
-      });
       
-      setSearchResults(results);
+      const lowerTerm = term.toLowerCase();
+      const filtered = customers.filter(customer => 
+        (customer.name?.toLowerCase().includes(lowerTerm) ||
+         customer.email?.toLowerCase().includes(lowerTerm) ||
+         customer.firstName?.toLowerCase().includes(lowerTerm) ||
+         customer.lastName?.toLowerCase().includes(lowerTerm))
+      );
+      
+      setFilteredCustomers(filtered);
+      setTotalCount(filtered.length);
       setPage(0); // Reset to first page when searching
-    } else if (!searchTerm) {
-      setIsSearching(false);
-      setSearchResults([]);
-    }
-  }, [searchTerm, allCustomers, isServerSearching]);
+    }, 300),
+    [customers]
+  );
 
-  const getCustomerName = (customer: Customer): string => {
-    if (customer.type === 'business') {
-      return customer.name || 'Unnamed Business';
-    } else {
-      return `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || 'Unnamed Individual';
-    }
-  };
-
-  const getKycStatus = (customer: Customer): string => {
-    return customer.kycStatus?.type || 'unknown';
-  };
-
-  const getKycStatusColor = (status: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
-    switch (status.toLowerCase()) {
-      case 'approved':
-        return 'success';
-      case 'pending':
-        return 'warning';
-      case 'rejected':
-        return 'error';
-      default:
-        return 'default';
-    }
+  // Handle search input change
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setSearchTerm(value);
+    debouncedSearch(value);
   };
 
   const formik = useFormik({
     initialValues: {
-      type: 'individual',
-      name: '',
+      type: 'business',
+      businessName: '',
       firstName: '',
       lastName: '',
       email: '',
     },
     validationSchema: Yup.object({
       type: Yup.string().required('Type is required'),
-      name: Yup.string().when(['type'], (type, schema) => {
-        return type[0] === 'business' ? schema.required('Business name is required') : schema;
+      businessName: Yup.string().when(['type'], ([type], schema) => {
+        return type === 'business' ? schema.required('Business name is required') : schema;
       }),
       firstName: Yup.string().when(['type'], ([type], schema) => {
         return type === 'individual' ? schema.required('First name is required') : schema;
@@ -260,56 +143,40 @@ const CustomersPage: React.FC = () => {
     }),
     onSubmit: async (values, { resetForm }) => {
       try {
-        setIsSubmitting(true);
-        setError(null);
-        
         let customerData;
         
         if (values.type === 'business') {
           customerData = {
-            type: values.type,
-            businessName: values.name,
+            type: 'business',
+            businessName: values.businessName,
             email: values.email,
           };
         } else {
           customerData = {
-            type: values.type,
+            type: 'individual',
             firstName: values.firstName,
             lastName: values.lastName,
             email: values.email,
           };
         }
-
-        console.log('Creating customer with data:', customerData);
-        await muralPayApi.createCustomer(accountIdentifier, customerData);
         
+        await muralPayApi.createCustomer(accountIdentifier, customerData);
         resetForm();
         setOpenDialog(false);
-        fetchCustomers(true);
+        fetchCustomers();
       } catch (err: any) {
-        console.error('Error creating customer:', err);
-        setError(err.response?.data?.message || err.message || 'Failed to create customer');
-      } finally {
-        setIsSubmitting(false);
+        setError(err.message || 'Failed to create customer');
       }
     },
   });
 
   const handleOpenDialog = () => {
     setOpenDialog(true);
-    setError(null);
   };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
     formik.resetForm();
-    setError(null);
-  };
-
-  const handleTypeChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-    const type = event.target.value as 'individual' | 'business';
-    setCustomerType(type);
-    formik.setFieldValue('type', type);
   };
 
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -319,28 +186,51 @@ const CustomersPage: React.FC = () => {
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
-    fetchCustomers(true);
   };
 
-  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(event.target.value);
-    if (isServerSearching) {
-      // If we're using server-side search, reset when the search term changes
-      setIsServerSearching(false);
+  const getKycStatusChip = (status: string | { type: string }) => {
+    let color: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = 'default';
+    let displayStatus = typeof status === 'string' ? status : status.type;
+    
+    if (typeof status === 'object' && status !== null) {
+      if (status.type === 'approved') {
+        color = 'success';
+        displayStatus = 'Approved';
+      } else if (status.type === 'pending') {
+        color = 'warning';
+        displayStatus = 'Pending';
+      } else if (status.type === 'rejected') {
+        color = 'error';
+        displayStatus = 'Rejected';
+      } else if (status.type === 'inactive') {
+        color = 'default';
+        displayStatus = 'Inactive';
+      } else {
+        displayStatus = status.type || 'Unknown';
+      }
+    } else if (typeof status === 'string') {
+      switch (status.toUpperCase()) {
+        case 'COMPLETED':
+        case 'APPROVED':
+          color = 'success';
+          break;
+        case 'IN_PROGRESS':
+        case 'PENDING':
+          color = 'warning';
+          break;
+        case 'REJECTED':
+          color = 'error';
+          break;
+        case 'NOT_STARTED':
+          color = 'default';
+          break;
+      }
     }
+    
+    return <Chip label={displayStatus} color={color} size="small" />;
   };
-
-  const handleServerSearch = () => {
-    setIsServerSearching(true);
-    fetchCustomers(true);
-  };
-
-  const handleClearSearch = () => {
-    setSearchTerm('');
-    setIsSearching(false);
-    setIsServerSearching(false);
-    fetchCustomers(true);
-  };
+  
+  const paginatedCustomers = filteredCustomers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <MainLayout title="Customers">
@@ -363,12 +253,12 @@ const CustomersPage: React.FC = () => {
         </Alert>
       )}
 
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+      {/* Search Box */}
+      <Box sx={{ mb: 3 }}>
         <TextField
-          label="Search customers"
-          variant="outlined"
-          size="small"
           fullWidth
+          placeholder="Search by name or email..."
+          variant="outlined"
           value={searchTerm}
           onChange={handleSearchChange}
           InputProps={{
@@ -378,28 +268,10 @@ const CustomersPage: React.FC = () => {
               </InputAdornment>
             ),
           }}
-          sx={{ maxWidth: 500, mr: 2 }}
         />
-        <Button 
-          variant="outlined" 
-          onClick={handleServerSearch}
-          disabled={loading || !searchTerm}
-          sx={{ mr: 1 }}
-        >
-          Search
-        </Button>
-        {(isSearching || isServerSearching) && (
-          <Button 
-            variant="outlined" 
-            onClick={handleClearSearch}
-            color="secondary"
-          >
-            Clear
-          </Button>
-        )}
       </Box>
 
-      {loading && customers.length === 0 ? (
+      {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress />
         </Box>
@@ -410,59 +282,50 @@ const CustomersPage: React.FC = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
-                  <TableCell>Type</TableCell>
                   <TableCell>Email</TableCell>
+                  <TableCell>Type</TableCell>
                   <TableCell>KYC Status</TableCell>
-                  <TableCell>Created</TableCell>
+                  <TableCell>Created At</TableCell>
+                  <TableCell>Updated At</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {customers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      {searchTerm ? 'No customers found matching your search.' : 'No customers found. Create your first customer.'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  customers.map((customer) => (
+                {paginatedCustomers.length > 0 ? (
+                  paginatedCustomers.map((customer) => (
                     <TableRow key={customer.id}>
-                      <TableCell>{getCustomerName(customer)}</TableCell>
+                      <TableCell>{customer.name}</TableCell>
+                      <TableCell>{customer.email}</TableCell>
                       <TableCell>
                         <Chip 
-                          label={customer.type === 'business' ? 'Business' : 'Individual'} 
+                          label={customer.type.charAt(0).toUpperCase() + customer.type.slice(1)} 
                           color={customer.type === 'business' ? 'primary' : 'secondary'} 
                           size="small" 
                         />
                       </TableCell>
-                      <TableCell>{customer.email}</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={getKycStatus(customer)} 
-                          color={getKycStatusColor(getKycStatus(customer))} 
-                          size="small" 
-                        />
-                      </TableCell>
+                      <TableCell>{getKycStatusChip(customer.kycStatus)}</TableCell>
                       <TableCell>
                         {new Date(customer.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
+                        {new Date(customer.updatedAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
                         <Button
+                          variant="outlined"
+                          size="small"
                           component={RouterLink}
                           to={`/customers/${customer.id}`}
-                          size="small"
-                          color="primary"
                         >
                           View
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))
-                )}
-                {loading && customers.length > 0 && (
+                ) : (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      <CircularProgress size={24} />
+                    <TableCell colSpan={7} align="center">
+                      {searchTerm ? 'No customers match your search' : 'No customers found'}
                     </TableCell>
                   </TableRow>
                 )}
@@ -472,15 +335,12 @@ const CustomersPage: React.FC = () => {
           
           <TablePagination
             component="div"
-            count={isSearching ? searchResults.length : totalCount || allCustomers.length}
+            count={totalCount}
             page={page}
-            rowsPerPage={rowsPerPage}
             onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
             onRowsPerPageChange={handleChangeRowsPerPage}
             rowsPerPageOptions={[5, 10, 25, 50]}
-            labelDisplayedRows={({ from, to, count }) => 
-              `${from}-${to} of ${count !== -1 ? count : `more than ${to}`}`
-            }
           />
         </>
       )}
@@ -489,75 +349,77 @@ const CustomersPage: React.FC = () => {
         <form onSubmit={formik.handleSubmit}>
           <DialogTitle>Create New Customer</DialogTitle>
           <DialogContent>
-            {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
-            )}
-            
-            <FormControl fullWidth margin="normal">
-              <InputLabel id="customer-type-label">Customer Type</InputLabel>
+            <FormControl fullWidth margin="dense" sx={{ mb: 2 }}>
+              <InputLabel id="type-label">Customer Type</InputLabel>
               <Select
-                labelId="customer-type-label"
+                labelId="type-label"
                 id="type"
                 name="type"
                 value={formik.values.type}
-                onChange={(e) => {
-                  handleTypeChange(e as any);
-                }}
+                onChange={formik.handleChange}
                 label="Customer Type"
               >
-                <MenuItem value="individual">Individual</MenuItem>
                 <MenuItem value="business">Business</MenuItem>
+                <MenuItem value="individual">Individual</MenuItem>
               </Select>
             </FormControl>
-            
+
             {formik.values.type === 'business' ? (
               <TextField
-                fullWidth
-                margin="normal"
-                id="name"
-                name="name"
+                margin="dense"
+                id="businessName"
+                name="businessName"
                 label="Business Name"
-                value={formik.values.name}
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={formik.values.businessName}
                 onChange={formik.handleChange}
-                error={formik.touched.name && Boolean(formik.errors.name)}
-                helperText={formik.touched.name && formik.errors.name}
+                error={formik.touched.businessName && Boolean(formik.errors.businessName)}
+                helperText={formik.touched.businessName && formik.errors.businessName}
+                sx={{ mb: 2 }}
               />
             ) : (
               <>
                 <TextField
-                  fullWidth
-                  margin="normal"
+                  margin="dense"
                   id="firstName"
                   name="firstName"
                   label="First Name"
+                  type="text"
+                  fullWidth
+                  variant="outlined"
                   value={formik.values.firstName}
                   onChange={formik.handleChange}
                   error={formik.touched.firstName && Boolean(formik.errors.firstName)}
                   helperText={formik.touched.firstName && formik.errors.firstName}
+                  sx={{ mb: 2 }}
                 />
                 <TextField
-                  fullWidth
-                  margin="normal"
+                  margin="dense"
                   id="lastName"
                   name="lastName"
                   label="Last Name"
+                  type="text"
+                  fullWidth
+                  variant="outlined"
                   value={formik.values.lastName}
                   onChange={formik.handleChange}
                   error={formik.touched.lastName && Boolean(formik.errors.lastName)}
                   helperText={formik.touched.lastName && formik.errors.lastName}
+                  sx={{ mb: 2 }}
                 />
               </>
             )}
-            
+
             <TextField
-              fullWidth
-              margin="normal"
+              margin="dense"
               id="email"
               name="email"
               label="Email Address"
               type="email"
+              fullWidth
+              variant="outlined"
               value={formik.values.email}
               onChange={formik.handleChange}
               error={formik.touched.email && Boolean(formik.errors.email)}
@@ -566,12 +428,8 @@ const CustomersPage: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button 
-              type="submit" 
-              variant="contained" 
-              disabled={isSubmitting || !formik.isValid}
-            >
-              {isSubmitting ? <CircularProgress size={24} /> : 'Create'}
+            <Button type="submit" variant="contained" disabled={formik.isSubmitting}>
+              {formik.isSubmitting ? <CircularProgress size={24} /> : 'Create'}
             </Button>
           </DialogActions>
         </form>

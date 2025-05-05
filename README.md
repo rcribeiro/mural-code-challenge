@@ -34,6 +34,9 @@ mural-light/
 │   ├── src/                # React components and logic
 │   ├── public/             # Static assets
 │   └── package.json        # Node.js dependencies
+├── scripts/                # Deployment and utility scripts
+│   ├── create-admin.sh     # Script to create admin user
+│   └── test-deployment.sh  # Script to test deployment
 ├── deploy.sh               # Deployment automation script
 └── README.md               # This documentation
 ```
@@ -52,15 +55,68 @@ mural-light/
 
 ---
 
+## 🚀 Serverless Deployment Optimizations
+
+The Light API is optimized for serverless deployment on AWS Lambda with several performance enhancements:
+
+### Cold Start Optimization
+- Application initialization is moved outside the Lambda handler
+- Lazy loading is implemented for heavy dependencies
+- Provisioned Concurrency is configured for critical functions (*Provisioned concurrency has cost implications - you're paying for the reserved capacity whether it's used or not. Make sure this is what you want. The resources are commented out in Terraform*)
+
+### Database Connection Management
+- Connection pooling is optimized for Lambda's lifecycle
+- Connections are reused across invocations
+- Connection parameters are tuned for serverless environments:
+  ```javascript
+  {
+    minPoolSize: 0,
+    maxPoolSize: 10,
+    maxIdleTimeMS: 270000, // Just under Lambda's 5-minute max timeout
+    serverSelectionTimeoutMS: 5000
+  }
+  ```
+
+### Response Optimization
+- Pagination is implemented for large data responses
+- API Gateway response compression is enabled
+- Large responses use efficient data streaming
+
+### Memory and Resource Management
+- Lambda memory settings are optimized for performance/cost balance
+- In-memory caching reduces database and API calls
+- Provider instances are cached with TTL management
+
+### Environment-Specific Configuration
+- Configuration is loaded from AWS Parameter Store
+- Environment variables control behavior without code changes
+- Secrets are managed securely outside the codebase
+
+### Deployment Strategy
+- Webpack creates optimized deployment packages
+- Lambda Layers separate dependencies from application code
+- CI/CD pipeline automates the deployment process
+
+### Monitoring and Reliability
+- CloudWatch alarms monitor function performance
+- Error handling is optimized for serverless context
+- WAF protects against common web vulnerabilities
+
+---
+
 ## 🚀 Deployment Instructions
 
 ### 1. Bootstrap Remote Backend (One-time Setup)
 
 Before running the main Terraform project, you need to create an S3 bucket and DynamoDB table to store the remote state.
 
-Create a folder `terraform-backend` and add a file `main.tf` with:
+```bash
+# Create a directory for the backend setup
+mkdir -p terraform-backend
+cd terraform-backend
 
-```hcl
+# Create the main.tf file
+cat > main.tf << 'EOF'
 provider "aws" {
   profile = "personal"
   region  = "us-east-1"
@@ -93,13 +149,14 @@ resource "aws_dynamodb_table" "tf_locks" {
     Name = "Terraform Lock Table"
   }
 }
-```
+EOF
 
-Go to the `terraform-backend` folder and run:
-
-```bash
+# Initialize and apply the Terraform configuration
 terraform init
-terraform apply
+terraform apply -auto-approve
+
+# Return to the project root
+cd ..
 ```
 
 ---
@@ -114,7 +171,17 @@ export TF_VAR_mongodb_public_key="your_public_key"
 export TF_VAR_mongodb_private_key="your_private_key"
 ```
 
-Or use a `.tfvars` file with the same keys.
+Or create a `terraform.tfvars` file in the `terraform` directory:
+
+```bash
+cd terraform
+cat > terraform.tfvars << EOF
+mongodb_org_id     = "your_org_id"
+mongodb_public_key = "your_public_key"
+mongodb_private_key = "your_private_key"
+EOF
+cd ..
+```
 
 ---
 
@@ -126,8 +193,8 @@ Before deploying the infrastructure, you need to build both the backend and fron
 
 ```bash
 cd light-api
-npm install
-npm run build
+./deploy.sh
+cd ..
 ```
 
 2. Build the React frontend:
@@ -136,6 +203,7 @@ npm run build
 cd light-frontend
 npm install
 npm run build
+cd ..
 ```
 
 Alternatively, use the deployment script which handles both builds:
@@ -152,14 +220,85 @@ Go to the main project folder and run:
 
 ```bash
 cd terraform
-terraform init
+
+# Initialize Terraform with the remote backend
+terraform init \
+  -backend-config="bucket=light-terraform-state" \
+  -backend-config="key=terraform.tfstate" \
+  -backend-config="region=us-east-1" \
+  -backend-config="dynamodb_table=terraform-locks"
+
+# Plan the deployment to see what will be created
 terraform plan
+
+# Apply the configuration to create all resources
 terraform apply
+
+# Save the outputs for later use
+terraform output > deployment_outputs.txt
+
+cd ..
 ```
 
 ---
 
-### 5. Outputs You'll Receive
+### 5. Deploy the Frontend to S3 and Configure CloudFront
+
+After Terraform has created the S3 bucket and CloudFront distribution, deploy the frontend:
+
+```bash
+# Run the frontend deployment script
+cd light-frontend
+./deploy-frontend.sh
+cd ..
+```
+
+The `deploy-frontend.sh` script handles:
+1. Building the React application
+2. Uploading the build to the S3 bucket
+3. Invalidating the CloudFront cache
+
+---
+
+### 6. Create an Admin User
+
+Create an admin user in the Cognito User Pool using the provided script:
+
+```bash
+# Make the script executable
+chmod +x scripts/create-admin.sh
+
+# Run the script
+./scripts/create-admin.sh
+```
+
+The script will:
+1. Extract User Pool ID and Client ID from Terraform outputs
+2. Create a user with admin privileges
+3. Confirm the user (bypassing email verification)
+
+---
+
+### 7. Test the Deployment
+
+Test the deployment using the provided script:
+
+```bash
+# Make the script executable
+chmod +x scripts/test-deployment.sh
+
+# Run the script
+./scripts/test-deployment.sh
+```
+
+The script will:
+1. Get the CloudFront domain from Terraform outputs
+2. Obtain an authentication token from Cognito
+3. Test API endpoints to verify functionality
+
+---
+
+### 8. Outputs You'll Receive
 
 After successful deployment, you'll get these important outputs:
 
@@ -261,7 +400,19 @@ curl -X GET https://YOUR_API_URL/integration-credentials \
 If you want to clean everything up:
 
 ```bash
+# Navigate to the Terraform directory
+cd terraform
+
+# Destroy all resources
 terraform destroy
+
+# Return to the project root
+cd ..
+
+# Clean up the Terraform backend
+cd terraform-backend
+terraform destroy
+cd ..
 ```
 
 > Warning: This will permanently delete all resources provisioned.
@@ -320,29 +471,11 @@ Enable and check API Gateway execution logs in CloudWatch.
 
 ### MongoDB Connection
 
-Verify the MongoDB connection string in the Lambda environment variables.
-
----
-
-## 🔍 Troubleshooting
-
-### Lambda Logs
-
-Check CloudWatch Logs for Lambda function errors:
+Verify the MongoDB connection string in the Lambda environment variables:
 
 ```bash
-aws logs get-log-events \
-  --log-group-name /aws/lambda/light-api \
-  --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/light-api --order-by LastEventTime --descending --limit 1 --query 'logStreams[0].logStreamName' --output text)
+aws lambda get-function-configuration --function-name light-api --query "Environment.Variables.MONGODB_URI"
 ```
-
-### API Gateway Logs
-
-Enable and check API Gateway execution logs in CloudWatch.
-
-### MongoDB Connection
-
-Verify the MongoDB connection string in the Lambda environment variables.
 
 ---
 
@@ -373,66 +506,133 @@ The Lambda function uses a custom Express setup to properly handle API Gateway r
 
 ```typescript
 import {APIGatewayProxyHandlerV2} from 'aws-lambda';
-import {Express} from 'express';
+import express, {Express} from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
 import {LightApiApplication} from './application';
 import serverlessExpress from '@vendia/serverless-express';
-import express from 'express';
-import bodyParser from 'body-parser';
+import {getConfig} from './config';
 
-let serverlessExpressInstance: any;
+// Initialize Express app outside the handler
+const expressApp = express();
 
-async function bootstrap() {
-  // Create a custom Express app that will handle the body parsing before LoopBack
-  const expressApp = express();
-  
-  // Add body parsing middleware
-  expressApp.use(bodyParser.json());
-  expressApp.use(bodyParser.urlencoded({ extended: true }));
-  
-  const lbApp = new LightApiApplication({
-    rest: {
-      port: 0,
-      host: '127.0.0.1',
-      openApiSpec: {
-        setServersFromRequest: true,
-      },
-      expressSettings: {
-        'x-powered-by': false,
-        'trust proxy': true,
-      },
-      // Disable LoopBack's built-in body parsing since we're doing it in Express
-      requestBodyParser: {
-        json: false,
-        text: false,
-        urlencoded: false,
-      },
-    },
-  });
+// Lazy-loaded application promise
+let lbAppPromise: Promise<LightApiApplication> | null = null;
+let serverlessExpressInstance: any = null;
+let configPromise: Promise<any> | null = null;
 
-  await lbApp.boot();
-  await lbApp.start();
+// Function to get or initialize the configuration
+const getAppConfig = async () => {
+  if (!configPromise) {
+    configPromise = getConfig();
+  }
+  return configPromise;
+};
 
-  // Mount the LoopBack app on the Express app
-  expressApp.use((req, res, next) => {
-    lbApp.requestHandler(req, res, next);
-  });
+// Function to get or initialize the LoopBack application
+const getLbApp = async (): Promise<LightApiApplication> => {
+  if (!lbAppPromise) {
+    lbAppPromise = (async () => {
+      console.log('Initializing LoopBack application...');
+      
+      // Get configuration
+      const config = await getAppConfig();
+      
+      // Set debug level from config
+      if (config.debug_level) {
+        process.env.DEBUG = config.debug_level;
+      }
+      
+      // Configure CORS
+      const corsOptions = {
+        origin: config.cors_allowed_origins?.split(',') || ['http://localhost:3000'],
+        methods: process.env.CORS_ALLOWED_METHODS?.split(',') || ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD', 'PATCH'],
+        allowedHeaders: process.env.CORS_ALLOWED_HEADERS?.split(',') || ['Content-Type', 'Authorization'],
+        exposedHeaders: process.env.CORS_EXPOSED_HEADERS?.split(',') || ['Content-Type', 'Authorization'],
+        credentials: process.env.CORS_ALLOW_CREDENTIALS === 'true',
+        maxAge: parseInt(process.env.CORS_MAX_AGE || '300'),
+      };
+      
+      // Apply middleware to Express app
+      expressApp.use(cors(corsOptions));
+      expressApp.use(bodyParser.json());
+      expressApp.use(bodyParser.urlencoded({ extended: true }));
+      
+      const app = new LightApiApplication({
+        rest: {
+          port: 0,
+          host: '127.0.0.1',
+          openApiSpec: {
+            setServersFromRequest: true,
+          },
+          expressSettings: {
+            'x-powered-by': false,
+            'trust proxy': true,
+          },
+          cors: false,
+          requestBodyParser: {
+            json: false,
+            text: false,
+            urlencoded: false,
+          },
+        },
+      });
+      
+      await app.boot();
+      await app.start();
+      console.log('LoopBack application initialized successfully');
+      return app;
+    })();
+  }
+  return lbAppPromise;
+};
 
-  return serverlessExpress({
-    app: expressApp,
-    binarySettings: {
-      isBinary: () => false,
-    }
+// Initialize the serverless express instance
+const getServerlessExpressInstance = async () => {
+  if (!serverlessExpressInstance) {
+    const lbApp = await getLbApp();
+    
+    // Mount the LoopBack app on the Express app
+    expressApp.use((req, res) => {
+      lbApp.requestHandler(req, res);
+    });
+    
+    serverlessExpressInstance = serverlessExpress({
+      app: expressApp,
+      binarySettings: {
+        isBinary: () => false,
+      }
+    });
+  }
+  return serverlessExpressInstance;
+};
+
+// Warm up the application during container initialization
+if (process.env.AWS_LAMBDA_INITIALIZATION_TYPE === 'provisioned-concurrency') {
+  console.log('Provisioned concurrency initialization - warming up application');
+  getServerlessExpressInstance().catch(err => {
+    console.error('Error during warm-up:', err);
   });
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
-  console.log('Incoming event:', JSON.stringify(event, null, 2));
+  // Set remaining time logging
+  const timeRemaining = () => Math.ceil((context.getRemainingTimeInMillis() / 1000));
   
-  if (!serverlessExpressInstance) {
-    serverlessExpressInstance = await bootstrap();
+  try {
+    console.log(`Handler invoked with ${timeRemaining()}s remaining`);
+    console.log('Incoming event:', JSON.stringify(event));
+    
+    const instance = await getServerlessExpressInstance();
+    return instance(event, context);
+  } catch (error) {
+    console.error(`Error with ${timeRemaining()}s remaining:`, error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Internal Server Error' }),
+      headers: { 'Content-Type': 'application/json' }
+    };
   }
-  
-  return serverlessExpressInstance(event, context);
 };
 ```
 

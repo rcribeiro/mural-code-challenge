@@ -102,7 +102,7 @@ const AccountDetailPage: React.FC = () => {
         setLoading(true);
         
         // First, try to get all accounts for this customer
-        const accountsResponse = await muralPayApi.getAccounts(accountIdentifier, customerId);
+        const accountsResponse = await muralPayApi.getAllAccounts(accountIdentifier, customerId);
         console.log('Accounts response:', accountsResponse.data);
         
         // Extract accounts array
@@ -141,26 +141,8 @@ const AccountDetailPage: React.FC = () => {
         
         // Fetch transactions
         try {
-          const transactionsResponse = await muralPayApi.getTransactions(accountIdentifier, accountId, customerId);
-          console.log('Transactions response:', transactionsResponse.data);
-          
-          // Extract transactions from the response
-          let transactionsData: Transaction[] = [];
-          if (transactionsResponse.data && typeof transactionsResponse.data === 'object') {
-            if (Array.isArray(transactionsResponse.data.results)) {
-              transactionsData = transactionsResponse.data.results;
-            } else if (Array.isArray(transactionsResponse.data.transactions)) {
-              transactionsData = transactionsResponse.data.transactions;
-            } else if (Array.isArray(transactionsResponse.data.data)) {
-              transactionsData = transactionsResponse.data.data;
-            } else if (Array.isArray(transactionsResponse.data.items)) {
-              transactionsData = transactionsResponse.data.items;
-            } else if (Array.isArray(transactionsResponse.data)) {
-              transactionsData = transactionsResponse.data;
-            }
-          }
-          
-          setTransactions(transactionsData);
+          const transactionsData = await muralPayApi.getAllTransactions(accountIdentifier, accountId, customerId);
+          setTransactions(transactionsData || []);
         } catch (transErr: any) {
           console.error('Error fetching transactions:', transErr);
           // Don't set error for transactions, just log it

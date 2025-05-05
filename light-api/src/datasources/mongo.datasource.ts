@@ -9,6 +9,10 @@ const config = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   connectTimeoutMS: 30000,
+  minPoolSize: 0,
+  maxPoolSize: 10,
+  maxIdleTimeMS: 270000, // Just under Lambda's 5-minute max timeout
+  serverSelectionTimeoutMS: 5000,
 };
 
 // Observe application's life cycle to disconnect the datasource when

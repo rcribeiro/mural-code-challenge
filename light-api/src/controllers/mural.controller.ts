@@ -21,7 +21,8 @@ import {
   FiatPayoutFeeError,
   PayoutStatusFilter,
   PayoutSearchResponse,
-  MuralTransactionSearchResponse
+  MuralTransactionSearchResponse,
+  PayoutStatus
 } from '../services/mural.interfaces';
 
 const debug = debugFactory('api-core:controller:mural');
@@ -76,42 +77,6 @@ export class MuralController {
     throw new HttpErrors.InternalServerError(`Mural API error: ${error.message}`);
   }
 
-  // Account endpoints
-  @authenticate('cognito')
-  @get('/mural/{accountIdentifier}/accounts')
-  async getMuralAccounts(
-    @inject(RestBindings.Http.RESPONSE) response: Response,
-    @param.path.string('accountIdentifier') accountIdentifier: string,
-    @inject(RestBindings.Http.REQUEST) request: Request,
-  ): Promise<MuralAccountsResponse> {
-    try {
-      const organizationId = request.headers['on-behalf-of'] as string;
-      const muralProvider = await this.getMuralProvider(accountIdentifier);
-      const result = await muralProvider.getAccounts(organizationId);
-      return result;
-    } catch (error) {
-      this.handleRateLimitError(error, response);
-    }
-  }
-
-  @authenticate('cognito')
-  @get('/mural/{accountIdentifier}/accounts/{accountId}')
-  async getMuralAccount(
-    @inject(RestBindings.Http.RESPONSE) response: Response,
-    @param.path.string('accountIdentifier') accountIdentifier: string,
-    @param.path.string('accountId') accountId: string,
-    @inject(RestBindings.Http.REQUEST) request: Request,
-  ): Promise<MuralAccount> {
-    try {
-      const organizationId = request.headers['on-behalf-of'] as string;
-      const muralProvider = await this.getMuralProvider(accountIdentifier);
-      return await muralProvider.getAccount(accountId, organizationId);
-    } catch (error) {
-      debug('Error in getMuralAccount:', error);
-      this.handleRateLimitError(error, response);
-    }
-  }
-
   @authenticate('cognito')
   @post('/mural/{accountIdentifier}/accounts')
   async createMuralAccount(
@@ -132,7 +97,7 @@ export class MuralController {
 
   // Organization endpoints
   @authenticate('cognito')
-  @get('/mural/{accountIdentifier}/organizations/{organizationId}')
+  @post('/mural/{accountIdentifier}/organizations/{organizationId}')
   async getMuralOrganization(
     @inject(RestBindings.Http.RESPONSE) response: Response,
     @param.path.string('accountIdentifier') accountIdentifier: string,
@@ -199,43 +164,6 @@ export class MuralController {
   }
 
   @authenticate('cognito')
-  @get('/mural/{accountIdentifier}/payouts/payout/{payoutRequestId}')
-  async getMuralPayoutRequest(
-    @inject(RestBindings.Http.RESPONSE) response: Response,
-    @param.path.string('accountIdentifier') accountIdentifier: string,
-    @param.path.string('payoutRequestId') payoutRequestId: string,
-    @inject(RestBindings.Http.REQUEST) request: Request,
-  ): Promise<MuralPayoutResponse> {
-    try {
-      const organizationId = request.headers['on-behalf-of'] as string;
-      const muralProvider = await this.getMuralProvider(accountIdentifier);
-      return await muralProvider.getPayoutRequest(payoutRequestId, organizationId);
-    } catch (error) {
-      debug('Error in getMuralPayoutRequest:', error);
-      this.handleRateLimitError(error, response);
-    }
-  }
-
-  @authenticate('cognito')
-  @post('/mural/{accountIdentifier}/payouts/search')
-  async searchMuralPayoutRequests(
-    @inject(RestBindings.Http.RESPONSE) response: Response,
-    @param.path.string('accountIdentifier') accountIdentifier: string,
-    @requestBody() data: { filter: PayoutStatusFilter; limit?: number; nextId?: string },
-    @inject(RestBindings.Http.REQUEST) request: Request,
-  ): Promise<PayoutSearchResponse> {
-    try {
-      const organizationId = request.headers['on-behalf-of'] as string;
-      const muralProvider = await this.getMuralProvider(accountIdentifier);
-      const { filter, limit, nextId } = data;
-      return await muralProvider.searchPayoutRequests(filter, limit, nextId, organizationId);
-    } catch (error) {
-      debug('Error in searchMuralPayoutRequests:', error);
-      this.handleRateLimitError(error, response);
-    }
-  }
-
-  @authenticate('cognito')
   @get('/mural/{accountIdentifier}/payouts/bank-details')
   async getMuralBankDetails(
     @inject(RestBindings.Http.RESPONSE) response: Response,
@@ -289,19 +217,18 @@ export class MuralController {
   }
 
   @authenticate('cognito')
-  @post('/mural/{accountIdentifier}/payouts/payout/{payoutRequestId}/execute')
-  async executeMuralPayoutRequest(
+  @post('/mural/{accountIdentifier}/payouts/execute-proxy')
+  async executeProxyMuralPayoutRequest(
     @inject(RestBindings.Http.RESPONSE) response: Response,
     @param.path.string('accountIdentifier') accountIdentifier: string,
-    @param.path.string('payoutRequestId') payoutRequestId: string,
-    @inject(RestBindings.Http.REQUEST) request: Request,
+    @requestBody() data: { payoutRequestId: string, organizationId: string },
   ): Promise<MuralPayoutResponse> {
     try {
-      const organizationId = request.headers['on-behalf-of'] as string;
+      const { payoutRequestId, organizationId } = data;
       const muralProvider = await this.getMuralProvider(accountIdentifier);
       return await muralProvider.executePayoutRequest(payoutRequestId, organizationId);
     } catch (error) {
-      debug('Error in executeMuralPayoutRequest:', error);
+      debug('Error in executeProxyMuralPayoutRequest:', error);
       this.handleRateLimitError(error, response);
     }
   }
@@ -342,21 +269,105 @@ export class MuralController {
   }
 
   @authenticate('cognito')
-  @post('/mural/{accountIdentifier}/transactions/search/account/{accountId}')
-  async searchMuralTransactions(
+  @get('/mural/{accountIdentifier}/payouts/proxy/{accountId}/{organizationId}')
+  async proxyMuralPayouts(
     @inject(RestBindings.Http.RESPONSE) response: Response,
     @param.path.string('accountIdentifier') accountIdentifier: string,
     @param.path.string('accountId') accountId: string,
-    @inject(RestBindings.Http.REQUEST) request: Request,
+    @param.path.string('organizationId') organizationId: string,
+    @param.query.number('limit') limit: number = 100,
+  ): Promise<any> {
+    try {
+      const muralProvider = await this.getMuralProvider(accountIdentifier);
+      
+      // Create a filter for all payout statuses
+      const filter = {
+        type: 'payoutStatus' as const,
+        statuses: ['AWAITING_EXECUTION', 'PENDING', 'EXECUTED', 'FAILED', 'CANCELED'] as PayoutStatus[]
+      };
+      
+      const result = await muralProvider.searchPayoutRequests(filter, limit, undefined, organizationId);
+      return result;
+    } catch (error) {
+      debug('Error in proxyMuralPayouts:', error);
+      this.handleRateLimitError(error, response);
+    }
+  }
+
+  @authenticate('cognito')
+  @get('/mural/{accountIdentifier}/accounts/proxy/{organizationId}')
+  async proxyMuralAccounts(
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+    @param.path.string('accountIdentifier') accountIdentifier: string,
+    @param.path.string('organizationId') organizationId: string,
+  ): Promise<MuralAccountsResponse> {
+    try {
+      const muralProvider = await this.getMuralProvider(accountIdentifier);
+      // Use 'none' as a special value to indicate no organization ID
+      const orgId = organizationId === 'none' ? undefined : organizationId;
+      const result = await muralProvider.getAccounts(orgId);
+      return result;
+    } catch (error) {
+      debug('Error in proxyMuralAccounts:', error);
+      this.handleRateLimitError(error, response);
+    }
+  }
+
+  @authenticate('cognito')
+  @get('/mural/{accountIdentifier}/accounts/proxy/single/{accountId}/{organizationId}')
+  async proxyMuralAccount(
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+    @param.path.string('accountIdentifier') accountIdentifier: string,
+    @param.path.string('accountId') accountId: string,
+    @param.path.string('organizationId') organizationId: string,
+  ): Promise<MuralAccount> {
+    try {
+      const muralProvider = await this.getMuralProvider(accountIdentifier);
+      // Use 'none' as a special value to indicate no organization ID
+      const orgId = organizationId === 'none' ? undefined : organizationId;
+      return await muralProvider.getAccount(accountId, orgId);
+    } catch (error) {
+      debug('Error in proxyMuralAccount:', error);
+      this.handleRateLimitError(error, response);
+    }
+  }
+
+  @authenticate('cognito')
+  @get('/mural/{accountIdentifier}/transactions/proxy/{accountId}/{organizationId}')
+  async proxyMuralTransactions(
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+    @param.path.string('accountIdentifier') accountIdentifier: string,
+    @param.path.string('accountId') accountId: string,
+    @param.path.string('organizationId') organizationId: string,
     @param.query.number('limit') limit?: number,
     @param.query.string('nextId') nextId?: string,
   ): Promise<MuralTransactionSearchResponse> {
     try {
-      const organizationId = request.headers['on-behalf-of'] as string;
       const muralProvider = await this.getMuralProvider(accountIdentifier);
-      return await muralProvider.searchTransactions(accountId, limit, nextId, organizationId);
+      // Use 'none' as a special value to indicate no organization ID
+      const orgId = organizationId === 'none' ? undefined : organizationId;
+      return await muralProvider.searchTransactions(accountId, limit, nextId, orgId);
     } catch (error) {
-      debug('Error in searchMuralTransactions:', error);
+      debug('Error in proxyMuralTransactions:', error);
+      this.handleRateLimitError(error, response);
+    }
+  }
+
+  @authenticate('cognito')
+  @get('/mural/{accountIdentifier}/payouts/proxy/{payoutRequestId}/{organizationId}')
+  async proxyMuralPayoutRequest(
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+    @param.path.string('accountIdentifier') accountIdentifier: string,
+    @param.path.string('payoutRequestId') payoutRequestId: string,
+    @param.path.string('organizationId') organizationId: string,
+  ): Promise<MuralPayoutResponse> {
+    try {
+      const muralProvider = await this.getMuralProvider(accountIdentifier);
+      // Use 'none' as a special value to indicate no organization ID
+      const orgId = organizationId === 'none' ? undefined : organizationId;
+      return await muralProvider.getPayoutRequest(payoutRequestId, orgId);
+    } catch (error) {
+      debug('Error in proxyMuralPayoutRequest:', error);
       this.handleRateLimitError(error, response);
     }
   }

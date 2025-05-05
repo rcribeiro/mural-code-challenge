@@ -45,7 +45,7 @@ import {
     getBankDetails(fiatCurrencyAndRail: string[]): Promise<BankDetailsResponse>;
     getPayoutFeesForTokenAmount(tokenFeeRequest: TokenFeeRequest[]): Promise<TokenPayoutFeeSuccess | TokenPayoutFeeError>;
     getPayoutFeesForFiatAmount(fiatFeeRequest: FiatFeeRequest[]): Promise<FiatPayoutFeeSuccess | FiatPayoutFeeError>;
-    executePayoutRequest(payoutRequestId: string): Promise<MuralPayoutResponse>;
+    executePayoutRequest(payoutRequestId: string, organizationId: string): Promise<MuralPayoutResponse>;
     cancelPayoutRequest(payoutRequestId: string, organizationId?: string): Promise<MuralPayoutResponse>;
     searchTransactions(
       accountId: string,

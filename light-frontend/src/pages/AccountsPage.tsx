@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  TablePagination,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { useFormik } from 'formik';
@@ -44,6 +45,13 @@ const AccountsPage: React.FC = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customer, setCustomer] = useState<any>(null);
+  
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextId, setNextId] = useState<string | undefined>(undefined);
 
   const accountIdentifier = process.env.REACT_APP_ACCOUNT_IDENTIFIER || '';
 
@@ -55,27 +63,10 @@ const AccountsPage: React.FC = () => {
       const customerResponse = await muralPayApi.getCustomer(accountIdentifier, customerId!);
       setCustomerName(customerResponse.data.name);
       
-      // Fetch customer accounts
-      const accountsResponse = await muralPayApi.getAccounts(accountIdentifier, customerId!);
-      console.log('Accounts response:', accountsResponse.data);
-      
-      // Extract accounts array from the response
-      let accountsData: Account[] = [];
-      if (Array.isArray(accountsResponse.data)) {
-        accountsData = accountsResponse.data;
-      } else if (accountsResponse.data && typeof accountsResponse.data === 'object') {
-        if (Array.isArray(accountsResponse.data.accounts)) {
-          accountsData = accountsResponse.data.accounts;
-        } else if (Array.isArray(accountsResponse.data.data)) {
-          accountsData = accountsResponse.data.data;
-        } else if (Array.isArray(accountsResponse.data.items)) {
-          accountsData = accountsResponse.data.items;
-        } else if (Array.isArray(accountsResponse.data.results)) {
-          accountsData = accountsResponse.data.results;
-        }
-      }
-      
+      // Use the getAllAccounts method which handles pagination internally
+      const accountsData = await muralPayApi.getAllAccounts(accountIdentifier, customerId!);
       setAccounts(accountsData);
+      setTotalCount(accountsData.length);
       setError(null);
     } catch (err: any) {
       console.error('Error fetching data:', err);
@@ -117,7 +108,8 @@ const AccountsPage: React.FC = () => {
       } catch (err: any) {
         setError(err.message || 'Failed to create account');
       }
-    },  });
+    },  
+  });
 
   const handleOpenDialog = () => {
     setOpenDialog(true);
@@ -126,6 +118,15 @@ const AccountsPage: React.FC = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     formik.resetForm();
+  };
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
   };
 
   const getStatusChip = (status: string) => {
@@ -145,6 +146,9 @@ const AccountsPage: React.FC = () => {
     
     return <Chip label={status} color={color} size="small" />;
   };
+
+  // Get current page of accounts
+  const paginatedAccounts = accounts.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <MainLayout title="Accounts">
@@ -181,92 +185,100 @@ const AccountsPage: React.FC = () => {
           <CircularProgress />
         </Box>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>API Enabled</TableCell>
-                <TableCell>Created At</TableCell>
-                <TableCell>Updated At</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {accounts.length === 0 ? (
+        <>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
-                    No accounts found. Create your first account.
-                  </TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>API Enabled</TableCell>
+                  <TableCell>Created At</TableCell>
+                  <TableCell>Updated At</TableCell>
+                  <TableCell>Actions</TableCell>
                 </TableRow>
-              ) : (
-                accounts.map((account) => (
-                  <TableRow key={account.id}>
-                    <TableCell>{account.name}</TableCell>
-                    <TableCell>{getStatusChip(account.status)}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={account.isApiEnabled ? "Enabled" : "Disabled"} 
-                        color={account.isApiEnabled ? "success" : "default"} 
-                        size="small" 
-                      />
-                    </TableCell>
-                    <TableCell>{new Date(account.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>{new Date(account.updatedAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        component={RouterLink}
-                        to={`/customers/${customerId}/accounts/${account.id}`}
-                        sx={{ mr: 1 }}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        component={RouterLink}
-                        to={`/customers/${customerId}/accounts/${account.id}/payout-requests`}
-                      >
-                        Payouts
-                      </Button>
+              </TableHead>
+              <TableBody>
+              {paginatedAccounts.length > 0 ? (
+                  paginatedAccounts.map((account) => (
+                    <TableRow key={account.id}>
+                      <TableCell>{account.name}</TableCell>
+                      <TableCell>{getStatusChip(account.status)}</TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={account.isApiEnabled ? 'Enabled' : 'Disabled'} 
+                          color={account.isApiEnabled ? 'success' : 'default'} 
+                          size="small" 
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {new Date(account.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(account.updatedAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          component={RouterLink}
+                          to={`/customers/${customerId}/accounts/${account.id}`}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center">
+                      No accounts found
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          
+          <TablePagination
+            component="div"
+            count={totalCount}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[5, 10, 25, 50]}
+          />
+        </>
       )}
 
-      {/* Create Account Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Create New Account</DialogTitle>
         <form onSubmit={formik.handleSubmit}>
+          <DialogTitle>Create New Account</DialogTitle>
           <DialogContent>
             <TextField
+              autoFocus
               margin="dense"
               id="name"
               name="name"
               label="Account Name"
+              type="text"
               fullWidth
               variant="outlined"
               value={formik.values.name}
               onChange={formik.handleChange}
               error={formik.touched.name && Boolean(formik.errors.name)}
               helperText={formik.touched.name && formik.errors.name}
+              sx={{ mb: 2 }}
             />
             <TextField
               margin="dense"
               id="description"
               name="description"
-              label="Account Description"
+              label="Description (Optional)"
+              type="text"
               fullWidth
               variant="outlined"
-              multiline
-              rows={3}
               value={formik.values.description}
               onChange={formik.handleChange}
               error={formik.touched.description && Boolean(formik.errors.description)}
@@ -276,7 +288,7 @@ const AccountsPage: React.FC = () => {
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={formik.isSubmitting}>
-              Create
+              {formik.isSubmitting ? <CircularProgress size={24} /> : 'Create'}
             </Button>
           </DialogActions>
         </form>

@@ -86,27 +86,11 @@ const CustomerDetailPage: React.FC = () => {
         const customerResponse = await muralPayApi.getCustomer(accountIdentifier, customerId!);
         setCustomer(customerResponse.data);
         
-        // Fetch customer accounts using the on-behalf-of header
-        const accountsResponse = await muralPayApi.getAccounts(accountIdentifier, customerId!);
-        console.log('Accounts response:', accountsResponse.data);
+        // Fetch customer accounts using the proxy endpoint
+        const accountsData = await muralPayApi.getAllAccounts(accountIdentifier, customerId!);
+        console.log('Accounts response:', accountsData);
         
-        // Handle different possible response structures
-        let accountsData: Account[] = [];
-        
-        if (Array.isArray(accountsResponse.data)) {
-          accountsData = accountsResponse.data;
-        } else if (accountsResponse.data && typeof accountsResponse.data === 'object') {
-          if (Array.isArray(accountsResponse.data.accounts)) {
-            accountsData = accountsResponse.data.accounts;
-          } else if (Array.isArray(accountsResponse.data.data)) {
-            accountsData = accountsResponse.data.data;
-          } else if (Array.isArray(accountsResponse.data.items)) {
-            accountsData = accountsResponse.data.items;
-          } else if (Array.isArray(accountsResponse.data.results)) {
-            accountsData = accountsResponse.data.results;
-          }
-        }
-        
+        // Set the accounts directly from the returned data
         setAccounts(accountsData || []);
         setError(null);
       } catch (err: any) {

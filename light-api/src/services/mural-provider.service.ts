@@ -19,7 +19,8 @@ import {
   FiatPayoutFeeError,
   PayoutStatusFilter,
   PayoutSearchResponse,
-  MuralTransactionSearchResponse
+  MuralTransactionSearchResponse,
+  MuralTransaction
 } from './mural.interfaces';
 import { MuralServiceProvider } from './mural-service-provider.interface';
 
@@ -58,6 +59,7 @@ export class MuralProvider implements MuralServiceProvider {
     if (organizationId) {
       headers['on-behalf-of'] = organizationId;
     }
+    headers['transfer-api-key'] = this.transferApiKey;
     return headers;
   }
 
@@ -285,7 +287,7 @@ export class MuralProvider implements MuralServiceProvider {
 
   async executePayoutRequest(
     payoutRequestId: string,
-    organizationId?: string
+    organizationId: string
   ): Promise<MuralPayoutResponse> {
     try {
       if (!this.transferApiKey) {
@@ -378,6 +380,104 @@ export class MuralProvider implements MuralServiceProvider {
       this.handleAxiosError(error);
       throw error;
     }
+  }
+
+  // Add this method to the MuralProvider class to handle paginated requests efficiently
+  async getPaginatedResults<T>(
+    fetchFunction: (limit: number, nextId?: string) => Promise<{ results: T[], nextId?: string, total: number }>,
+    pageSize: number = 100,
+    maxItems: number = 1000
+  ): Promise<T[]> {
+    let allResults: T[] = [];
+    let nextId: string | undefined = undefined;
+    
+    do {
+      try {
+        const response = await fetchFunction(pageSize, nextId);
+        allResults = [...allResults, ...response.results];
+        nextId = response.nextId;
+        
+        // Stop if we've reached the maximum number of items or there are no more results
+        if (!nextId || allResults.length >= maxItems) {
+          break;
+        }
+      } catch (error) {
+        debug('Error in paginated request:', error);
+        this.handleAxiosError(error);
+        break;
+      }
+    } while (nextId);
+    
+    // Trim to max items if needed
+    return allResults.slice(0, maxItems);
+  }
+
+  // Implementation for getAccounts with pagination
+  async getAllAccounts(
+    maxItems: number = 1000,
+    organizationId?: string
+  ): Promise<MuralAccount[]> {
+    try {
+      const response = await this.getAccounts(organizationId);
+      
+      // If the response already contains an array of accounts, return it
+      if (response.accounts && Array.isArray(response.accounts)) {
+        return response.accounts.slice(0, maxItems);
+      }
+      
+      return [];
+    } catch (error) {
+      debug('Error in getAllAccounts():', error);
+      this.handleAxiosError(error);
+      throw error;
+    }
+  }
+
+  // Implementation for searchPayoutRequests with pagination
+  async getAllPayoutRequests(
+    filter: PayoutStatusFilter,
+    maxItems: number = 1000,
+    organizationId?: string
+  ): Promise<MuralPayoutResponse[]> {
+    return this.getPaginatedResults<MuralPayoutResponse>(
+      async (limit, nextId) => {
+        const response = await this.searchPayoutRequests(filter, limit, nextId, organizationId);
+        return response;
+      },
+      100, // page size
+      maxItems
+    );
+  }
+
+  // Implementation for getOrganizations with pagination
+  async getAllOrganizations(
+    filter?: any,
+    maxItems: number = 1000
+  ): Promise<MuralOrganization[]> {
+    return this.getPaginatedResults<MuralOrganization>(
+      async (limit, nextId) => {
+        const response = await this.getOrganizations(filter, limit, nextId);
+        return response;
+      },
+      100, // page size
+      maxItems
+    );
+  }
+
+  // Implementation for searchTransactions with pagination
+  async getAllTransactions(
+    accountId: string, 
+    maxItems: number = 1000,
+    organizationId?: string
+  ): Promise<MuralTransaction[]> {
+    return this.getPaginatedResults<MuralTransaction>(
+      async (limit, nextId) => {
+        const response = await this.searchTransactions(accountId, limit, nextId, organizationId);
+        return response;
+      },
+      100, // page size
+      maxItems
+    );
   }
 
   private handleAxiosError(error: any): void {

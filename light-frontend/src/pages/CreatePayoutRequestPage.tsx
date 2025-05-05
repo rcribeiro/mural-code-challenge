@@ -424,7 +424,7 @@ const validationSchema = Yup.object({
       setLoading(true);
       setError(null);
       
-      await muralPayApi.executePayoutRequest(accountIdentifier, accountId!, payoutRequestId, customerId);
+      await muralPayApi.executePayoutRequest(accountIdentifier, payoutRequestId!, customerId!);
       
       // Navigate to payout requests page
       navigate(`/customers/${customerId}/accounts/${accountId}/payout-requests`);

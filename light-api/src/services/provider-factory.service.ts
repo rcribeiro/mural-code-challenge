@@ -10,13 +10,24 @@ const debug = debugFactory('api-core:service:provider-factory');
 
 @injectable({ scope: BindingScope.SINGLETON })
 export class ProviderFactoryService {
+  // Cache for providers to reduce initialization overhead
+  private providerCache: Map<string, { provider: MuralProvider, timestamp: number }> = new Map();
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+
   constructor(
     @repository(IntegrationCredentialRepository)
     private credentialRepository: IntegrationCredentialRepository,
   ) { }
 
-
   async getMuralProvider(accountIdentifier: string): Promise<MuralProvider> {
+    // Check cache first
+    const cachedEntry = this.providerCache.get(accountIdentifier);
+    const now = Date.now();
+    
+    if (cachedEntry && (now - cachedEntry.timestamp) < this.CACHE_TTL) {
+      debug(`Using cached provider for account ${accountIdentifier}`);
+      return cachedEntry.provider;
+    }
   
     // Define the where clause with explicit typing
     const whereClause: Where<IntegrationCredential> = {
@@ -56,7 +67,19 @@ export class ProviderFactoryService {
       apiKey: credential.credentials.apiKey,
       transferApiKey: credential.credentials.transferApiKey,
     });
+    
+    // Cache the provider
+    this.providerCache.set(accountIdentifier, { provider, timestamp: now });
   
     return provider;
+  }
+  
+  // Method to clear cache for testing or manual cache management
+  clearProviderCache(accountIdentifier?: string): void {
+    if (accountIdentifier) {
+      this.providerCache.delete(accountIdentifier);
+    } else {
+      this.providerCache.clear();
+    }
   }
 }

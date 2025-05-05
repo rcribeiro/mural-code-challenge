@@ -1,3 +1,3 @@
 output "api_gateway_url" {
-  value = aws_apigatewayv2_api.http_api.api_endpoint
+  value = "${aws_api_gateway_stage.api.invoke_url}"
 }

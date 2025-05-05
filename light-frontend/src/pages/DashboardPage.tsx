@@ -277,7 +277,6 @@ const DashboardPage: React.FC = () => {
       try {
         // Fetch all customers with pagination
         const customersData = await fetchAllCustomers();
-        console.log('Dashboard fetched customers:', customersData.length);
         
         setCustomers(customersData);
         

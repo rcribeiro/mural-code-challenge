@@ -76,14 +76,8 @@ const PayoutRequestsPage: React.FC = () => {
         setAccountName(accountResponse.data.name);
         
         // Fetch payout requests
-        const payoutsResponse = await muralPayApi.getPayoutRequests(accountIdentifier, accountId!, customerId);
-        
-        // Log the response for debugging
-        console.log('Payouts response:', payoutsResponse.data);
-        
-        // Extract the results array from the response
-        const payoutsData = payoutsResponse.data?.results || [];
-        setPayoutRequests(payoutsData);
+        const payoutsData = await muralPayApi.getAllPayoutRequests(accountIdentifier, accountId!, customerId);
+        setPayoutRequests(payoutsData || []);
         
         setError(null);
       } catch (err: any) {
@@ -118,7 +112,7 @@ const PayoutRequestsPage: React.FC = () => {
       
       // Refresh the payout requests
       const filter = { accountId: accountId };
-      const payoutsResponse = await muralPayApi.getPayoutRequests(accountIdentifier, accountId!, customerId);
+      const payoutsResponse = await muralPayApi.getAllPayoutRequests(accountIdentifier, accountId!, customerId);
       setPayoutRequests(Array.isArray(payoutsResponse.data) 
         ? payoutsResponse.data 
         : (payoutsResponse.data?.payouts || []));
