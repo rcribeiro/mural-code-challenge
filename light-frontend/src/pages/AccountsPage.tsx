@@ -89,7 +89,10 @@ const AccountsPage: React.FC = () => {
     },
     validationSchema: Yup.object({
       name: Yup.string().required('Account name is required'),
-      description: Yup.string(),
+      // Keep client-side rule in sync with API (>= 2 chars)
+      description: Yup.string()
+        .min(2, 'Description must be at least 2 characters')
+        .nullable(),
     }),
     onSubmit: async (values, { resetForm }) => {
       try {

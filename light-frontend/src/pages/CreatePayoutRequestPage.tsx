@@ -1014,7 +1014,7 @@ const validationSchema = Yup.object({
               </FieldArray>
               
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-                {!formik.isValid && (
+                {/* {!formik.isValid && (
                   <Box sx={{ color: 'error.main', mr: 2 }}>
                     <Typography variant="caption">
                       Form has validation errors. Check all fields.
@@ -1023,7 +1023,7 @@ const validationSchema = Yup.object({
                       {JSON.stringify(formik.errors, null, 2)}
                     </pre>
                   </Box>
-                )}
+                )} */}
                 
                 <Button
                   type="submit"

@@ -123,7 +123,18 @@ const apiRequest = async <T>(
 
         retries++;
       } else {
-        // For other errors, don't retry
+        if (error.response?.status === 400) {
+          const data = (error.response.data as any) ?? {};
+          const payload = data.error ?? data;   // unwrap
+
+          const message =
+            Array.isArray(payload.details) && payload.details.length
+              ? payload.details.join(', ')
+              : payload.message || 'Bad request';
+
+          throw new Error(message);
+        }
+
         throw error;
       }
     }
@@ -187,7 +198,11 @@ export const muralPayApi = {
     1000, throttleOptions),
 
   getCustomerKycLink: throttle((accountIdentifier: string, organizationId: string) =>
-    apiRequest(() => api.post(`/mural/${accountIdentifier}/organizations/${organizationId}/kyc-link`)),
+    apiRequest(() => api.get(`/mural/${accountIdentifier}/organizations/${organizationId}/kyc-link`)),
+    1000, throttleOptions),
+
+  getCustomerTosLink: throttle((accountIdentifier: string, organizationId: string) =>
+    apiRequest(() => api.get(`/mural/${accountIdentifier}/organizations/${organizationId}/tos-link`)),
     1000, throttleOptions),
 
   // Account endpoints
@@ -260,11 +275,21 @@ export const muralPayApi = {
   }, 1000, throttleOptions),
 
   // Payout request endpoints
-  createPayoutRequest: throttle((accountIdentifier: string, accountId: string, data: any, organizationId?: string) =>
-    apiRequest(() => api.post(`/mural/${accountIdentifier}/payouts/payout`, data, {
-      headers: organizationId ? { 'on-behalf-of': organizationId } : undefined
-    })),
-    1000, throttleOptions),
+  createPayoutRequest: throttle((accountIdentifier: string, accountId: string, data: any, organizationId?: string) => {
+    // If organizationId is provided, use the proxy endpoint
+    console.log(`Creating payout request with organizationId: ${organizationId}`);
+    if (organizationId) {
+      return apiRequest(() => api.post(`/mural/${accountIdentifier}/payouts/payout-proxy`, {
+        payoutRequest: data,
+        organizationId
+      }));
+    } else {
+      // Otherwise use the original endpoint with the on-behalf-of header
+      return apiRequest(() => api.post(`/mural/${accountIdentifier}/payouts/payout`, data, {
+        headers: organizationId ? { 'on-behalf-of': organizationId } : undefined
+      }));
+    }
+  }, 1000, throttleOptions),
 
   // Update the executePayoutRequest method in the muralPayApi object
   executePayoutRequest: throttle((accountIdentifier: string, payoutRequestId: string, organizationId: string) =>

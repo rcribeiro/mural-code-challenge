@@ -22,7 +22,8 @@ import {
   PayoutStatusFilter,
   PayoutSearchResponse,
   MuralTransactionSearchResponse,
-  PayoutStatus
+  PayoutStatus,
+  MuralTosLinkResponse
 } from '../services/mural.interfaces';
 
 const debug = debugFactory('api-core:controller:mural');
@@ -126,21 +127,36 @@ export class MuralController {
     }
   }
 
-  // Payout endpoints
   @authenticate('cognito')
-  @post('/mural/{accountIdentifier}/payouts/payout')
-  async createMuralPayoutRequest(
+  @get('/mural/{accountIdentifier}/organizations/{organizationId}/tos-link')
+  async getMuralOrganizationTosLink(
     @inject(RestBindings.Http.RESPONSE) response: Response,
     @param.path.string('accountIdentifier') accountIdentifier: string,
-    @requestBody() data: MuralCreatePayoutRequest,
-    @inject(RestBindings.Http.REQUEST) request: Request,
+    @param.path.string('organizationId') organizationId: string,
+  ): Promise<MuralTosLinkResponse> {
+    try {
+      const muralProvider = await this.getMuralProvider(accountIdentifier);
+      return await muralProvider.getOrganizationTosLink(organizationId);
+    } catch (error) {
+      debug('Error in getMuralOrganizationTosLink:', error);
+      this.handleRateLimitError(error, response);
+    }
+  }
+
+  // Payout endpoints
+  @authenticate('cognito')
+  @post('/mural/{accountIdentifier}/payouts/payout-proxy')
+  async proxyCreateMuralPayoutRequest(
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+    @param.path.string('accountIdentifier') accountIdentifier: string,
+    @requestBody() data: { payoutRequest: MuralCreatePayoutRequest, organizationId: string },
   ): Promise<MuralPayoutResponse> {
     try {
-      const organizationId = request.headers['on-behalf-of'] as string;
+      const { payoutRequest, organizationId } = data;
       const muralProvider = await this.getMuralProvider(accountIdentifier);
-      return await muralProvider.createPayoutRequest(data, organizationId);
+      return await muralProvider.createPayoutRequest(payoutRequest, organizationId);
     } catch (error) {
-      debug('Error in createMuralPayoutRequest:', error);
+      debug('Error in proxyCreateMuralPayoutRequest:', error);
       this.handleRateLimitError(error, response);
     }
   }

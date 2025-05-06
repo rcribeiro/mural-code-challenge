@@ -40,7 +40,8 @@ interface Customer {
   firstName?: string;
   lastName?: string;
   email?: string;
-  kycStatus: string;
+  kycStatus: string | {type: string};
+  tosStatus?: 'ACCEPTED' | 'NOT_ACCEPTED';
   createdAt: string;
   updatedAt: string;
 }
@@ -70,7 +71,8 @@ const CustomersPage: React.FC = () => {
         ...customer,
         name: customer.type === 'individual' 
           ? `${customer.firstName} ${customer.lastName}`
-          : customer.name || customer.businessName
+          : customer.name || customer.businessName,
+        tosStatus: customer.tosStatus || 'NOT_ACCEPTED',
       }));
       
       setCustomers(processedCustomers);
@@ -230,7 +232,33 @@ const CustomersPage: React.FC = () => {
     return <Chip label={displayStatus} color={color} size="small" />;
   };
   
+  const getTosStatusChip = (status?: string) => {
+    const upper = (status || 'NOT_ACCEPTED').toUpperCase();
+    const color =
+      upper === 'ACCEPTED' ? 'success' :
+      upper === 'NOT_ACCEPTED' ? 'warning' :
+      'default';
+    return <Chip label={upper.replace('_', ' ')} color={color} size="small" />;
+  };
+  
   const paginatedCustomers = filteredCustomers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+  const handleAcceptTos = async (customer: Customer) => {
+    try {
+      const {data} = await muralPayApi.getCustomerTosLink(
+        accountIdentifier,
+        customer.id,
+      );
+      const link: string | undefined = data?.tosLink ?? data?.link ?? data;
+      if (link) {
+        window.open(link, '_blank', 'noopener');
+      } else {
+        setError('Unable to obtain ToS link, please try again later.');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Unable to obtain ToS link');
+    }
+  };
 
   return (
     <MainLayout title="Customers">
@@ -285,6 +313,7 @@ const CustomersPage: React.FC = () => {
                   <TableCell>Email</TableCell>
                   <TableCell>Type</TableCell>
                   <TableCell>KYC Status</TableCell>
+                  <TableCell>ToS Status</TableCell>
                   <TableCell>Created At</TableCell>
                   <TableCell>Updated At</TableCell>
                   <TableCell>Actions</TableCell>
@@ -304,6 +333,7 @@ const CustomersPage: React.FC = () => {
                         />
                       </TableCell>
                       <TableCell>{getKycStatusChip(customer.kycStatus)}</TableCell>
+                      <TableCell>{getTosStatusChip(customer.tosStatus)}</TableCell>
                       <TableCell>
                         {new Date(customer.createdAt).toLocaleDateString()}
                       </TableCell>
@@ -316,9 +346,20 @@ const CustomersPage: React.FC = () => {
                           size="small"
                           component={RouterLink}
                           to={`/customers/${customer.id}`}
+                          sx={{mr: 1}}
                         >
                           View
                         </Button>
+                        {customer.tosStatus !== 'ACCEPTED' && (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            color="warning"
+                            onClick={() => handleAcceptTos(customer)}
+                          >
+                            Accept ToS
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))

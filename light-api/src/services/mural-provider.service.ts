@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosInstance } from 'axios';
 import { HttpErrors } from '@loopback/rest';
 import debugFactory from 'debug';
 import {
@@ -20,7 +20,8 @@ import {
   PayoutStatusFilter,
   PayoutSearchResponse,
   MuralTransactionSearchResponse,
-  MuralTransaction
+  MuralTransaction,
+  MuralTosLinkResponse
 } from './mural.interfaces';
 import { MuralServiceProvider } from './mural-service-provider.interface';
 
@@ -161,6 +162,19 @@ export class MuralProvider implements MuralServiceProvider {
       debug('Error in getOrganizationKycLink():', error);
       this.handleAxiosError(error);
       throw error;
+    }
+  }
+
+  async getOrganizationTosLink(organizationId: string): Promise<MuralTosLinkResponse> {
+    try {
+      const res = await this.httpClient.get(
+        `/api/organizations/${organizationId}/tos-link`,
+      );
+      return res.data;
+    } catch (err) {
+      debug('Error in getOrganizationTosLink():', err);
+      this.handleAxiosError(err as AxiosError);
+      throw err;
     }
   }
 
@@ -480,52 +494,44 @@ export class MuralProvider implements MuralServiceProvider {
     );
   }
 
-  private handleAxiosError(error: any): void {
+  private handleAxiosError(error: AxiosError): never {
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      debug('Error response status:', error.response.status);
-      debug('Error response data:', error.response.data);
+      const {status, data} = error.response;
+      /*  Extract human-readable message  */
+      const message: string =
+        Array.isArray((data as any)?.details) && (data as any).details.length
+          ? (data as any).details.join(', ')
+          : (data as any)?.message || 'Unknown Mural error';
 
-      const status = error.response.status;
-      const message = error.response.data?.message || 'Unknown Mural API error';
+      /*  Attach raw payload for downstream logging if useful  */
+      const base: Partial<Error> = {name: 'MuralError'};
 
-      if (status === 401 || status === 403) {
-        throw new HttpErrors.Forbidden('Authentication failed with Mural API');
-      } else if (status === 404) {
-        throw new HttpErrors.NotFound('Resource not found in Mural API');
-      } else if (status === 429 || 
-                (status === 500 && 
-                 error.response?.data?.message?.includes('ThrottlerException'))) {
-        
-        // Get retry-after time from headers if available
-        const retryAfter = error.response.headers['retry-after-api'] || '30';
-        
-        // Create a custom error with rate limit information
-        const rateLimitError = new Error('Rate limit exceeded') as Error & { 
-          status: number; 
-          headers: Record<string, string>;
-          code: string;
-        };
-        rateLimitError.status = 429;
-        rateLimitError.code = 'RATE_LIMIT_EXCEEDED';
-        rateLimitError.headers = {
-          'Retry-After': retryAfter,
-          'X-Rate-Limit-Exceeded': 'true'
-        };
-        
-        throw rateLimitError;
-      } else {
-        throw new HttpErrors.InternalServerError(`Mural API error: ${message}`);
+      switch (status) {
+        case 400: {
+          const err = new HttpErrors.BadRequest(message);
+          Object.assign(err, base, {details: (data as any)?.details});
+          throw err;
+        }
+        case 401:
+        case 403: {
+          const err = new HttpErrors.Unauthorized(message);
+          Object.assign(err, base);
+          throw err;
+        }
+        case 404: {
+          const err = new HttpErrors.NotFound(message);
+          Object.assign(err, base);
+          throw err;
+        }
+        default: {
+          const err = new HttpErrors.InternalServerError(message);
+          Object.assign(err, base);
+          throw err;
+        }
       }
-    } else if (error.request) {
-      // The request was made but no response was received
-      debug('No response received from Mural API');
-      throw new HttpErrors.ServiceUnavailable('No response received from Mural API');
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      debug('Error setting up request to Mural API:', error.message);
-      throw new HttpErrors.InternalServerError(`Error setting up request to Mural API: ${error.message}`);
     }
+
+    /*  Network / unknown error – keep previous behaviour  */
+    throw new HttpErrors.InternalServerError(`Mural API error: ${error.message}`);
   }
 }

@@ -148,6 +148,7 @@ resource "aws_lambda_function" "loopback_api" {
       CORS_MAX_AGE = "300"
     }
   }
+  layers = [aws_lambda_layer_version.dependencies_layer.arn]
 }
 
 # Create a CloudWatch Log Group for API Gateway

@@ -29,6 +29,7 @@ const Grid = (props: any) => {
 };
 
 interface Customer {
+  tosStatus: string;
   id: string;
   type: 'individual' | 'business';
   name?: string;
@@ -110,6 +111,24 @@ const CustomerDetailPage: React.FC = () => {
     setTabValue(newValue);
   };
 
+  const handleAcceptTos = async () => {
+    if (!customer) return;
+    try {
+      const {data} = await muralPayApi.getCustomerKycLink(
+        accountIdentifier,
+        customer.id,
+      );
+      const link: string | undefined = data?.link ?? data?.kycLink ?? data;
+      if (link) {
+        window.open(link, '_blank', 'noopener');
+      } else {
+        setError('Unable to obtain ToS link, please try again later.');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Unable to obtain ToS link');
+    }
+  };
+
   // Get customer display name based on type
   const getCustomerName = (customer: Customer): string => {
     if (customer.type === 'business') {
@@ -139,6 +158,16 @@ const CustomerDetailPage: React.FC = () => {
     }
   };
 
+  const getTosStatusColor = (status: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
+    switch (status.toUpperCase()) {
+      case 'ACCEPTED':
+        return 'success';
+      case 'NOT_ACCEPTED':
+        return 'warning';
+      default:
+        return 'default';
+    }
+  };
   // Format account status for display
   const formatStatus = (status: string): string => {
     return status.charAt(0) + status.slice(1).toLowerCase();
@@ -223,6 +252,27 @@ const CustomerDetailPage: React.FC = () => {
               size="small" 
               sx={{ textTransform: 'capitalize' }}
             />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Typography variant="subtitle2" color="text.secondary">
+              ToS Status
+            </Typography>
+            <Chip
+              label={customer.tosStatus || 'NOT_ACCEPTED'}
+              color={getTosStatusColor(customer.tosStatus || 'NOT_ACCEPTED')}
+              size="small"
+            />
+            {customer.tosStatus !== 'ACCEPTED' && (
+              <Button
+                size="small"
+                variant="contained"
+                color="warning"
+                sx={{ml: 1, mt: .5}}
+                onClick={() => handleAcceptTos()}
+              >
+                Accept ToS
+              </Button>
+            )}
           </Grid>
           <Grid item xs={12} md={4}>
             <Typography variant="subtitle2" color="text.secondary">

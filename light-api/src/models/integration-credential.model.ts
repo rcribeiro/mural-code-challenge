@@ -28,13 +28,13 @@ export class IntegrationCredential extends Entity {
     type: 'string',
     required: true,
   })
-  providerType: string; // 'meow', 'other-provider', etc.
+  providerType: string;
 
   @property({
     type: 'string',
     required: true,
   })
-  accountIdentifier: string; // External account ID or reference
+  accountIdentifier: string;
 
   @property({
     type: 'object',

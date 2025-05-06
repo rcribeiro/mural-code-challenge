@@ -247,6 +247,11 @@ export interface MuralKycLinkResponse {
   expiresAt: string;
 }
 
+export interface MuralTosLinkResponse {
+  /** Hosted page where the organization can accept ToS */
+  tosLink: string;
+}
+
 // Transfer interfaces
 export interface MuralTransferFee {
   fiatCurrencyCode: string;
