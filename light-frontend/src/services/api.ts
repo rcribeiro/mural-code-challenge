@@ -192,9 +192,7 @@ export const muralPayApi = {
 
   // Account endpoints
   createAccount: throttle((accountIdentifier: string, organizationId: string, data: any) =>
-    apiRequest(() => api.post(`/mural/${accountIdentifier}/accounts`, data, {
-      headers: { 'on-behalf-of': organizationId }
-    })),
+    apiRequest(() => api.post(`/mural/${accountIdentifier}/accounts/proxy/${organizationId || 'none'}`, data)),
     1000, throttleOptions),
 
   getAccounts: throttle((accountIdentifier: string, organizationId?: string) =>

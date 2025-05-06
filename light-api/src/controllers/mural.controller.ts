@@ -50,10 +50,10 @@ export class MuralController {
 
   // Helper method to handle rate limit errors
   private handleRateLimitError(error: any, response: Response): never {
-    if (error.code === 'RATE_LIMIT_EXCEEDED' || 
-        (error.status === 429) || 
-        (error.message && error.message.includes('Rate limit exceeded'))) {
-      
+    if (error.code === 'RATE_LIMIT_EXCEEDED' ||
+      (error.status === 429) ||
+      (error.message && error.message.includes('Rate limit exceeded'))) {
+
       // Add the rate limit headers to the response
       if (error.headers) {
         if (error.headers['Retry-After']) {
@@ -63,36 +63,18 @@ export class MuralController {
           response.set('X-Rate-Limit-Exceeded', error.headers['X-Rate-Limit-Exceeded']);
         }
       }
-      
+
       // Throw a rate limit error that will be caught by the framework
       const httpError = new HttpErrors.TooManyRequests('Rate limit exceeded');
       httpError.headers = error.headers;
       throw httpError;
     }
-    
+
     // For other errors, throw the original error or a generic error
     if (error instanceof HttpErrors.HttpError) {
       throw error;
     }
     throw new HttpErrors.InternalServerError(`Mural API error: ${error.message}`);
-  }
-
-  @authenticate('cognito')
-  @post('/mural/{accountIdentifier}/accounts')
-  async createMuralAccount(
-    @inject(RestBindings.Http.RESPONSE) response: Response,
-    @param.path.string('accountIdentifier') accountIdentifier: string,
-    @requestBody() data: MuralCreateAccountRequest,
-    @inject(RestBindings.Http.REQUEST) request: Request,
-  ): Promise<MuralAccount> {
-    try {
-      const organizationId = request.headers['on-behalf-of'] as string;
-      const muralProvider = await this.getMuralProvider(accountIdentifier);
-      return await muralProvider.createAccount(data.name, data.description, organizationId);
-    } catch (error) {
-      debug('Error in createMuralAccount:', error);
-      this.handleRateLimitError(error, response);
-    }
   }
 
   // Organization endpoints
@@ -172,10 +154,10 @@ export class MuralController {
   ): Promise<BankDetailsResponse> {
     try {
       // Ensure fiatCurrencyAndRail is always an array
-      const currencyRailArray = Array.isArray(fiatCurrencyAndRail) 
-        ? fiatCurrencyAndRail 
+      const currencyRailArray = Array.isArray(fiatCurrencyAndRail)
+        ? fiatCurrencyAndRail
         : [fiatCurrencyAndRail];
-    
+
       const muralProvider = await this.getMuralProvider(accountIdentifier);
       return await muralProvider.getBankDetails(currencyRailArray);
     } catch (error) {
@@ -279,13 +261,13 @@ export class MuralController {
   ): Promise<any> {
     try {
       const muralProvider = await this.getMuralProvider(accountIdentifier);
-      
+
       // Create a filter for all payout statuses
       const filter = {
         type: 'payoutStatus' as const,
         statuses: ['AWAITING_EXECUTION', 'PENDING', 'EXECUTED', 'FAILED', 'CANCELED'] as PayoutStatus[]
       };
-      
+
       const result = await muralProvider.searchPayoutRequests(filter, limit, undefined, organizationId);
       return result;
     } catch (error) {
@@ -368,6 +350,25 @@ export class MuralController {
       return await muralProvider.getPayoutRequest(payoutRequestId, orgId);
     } catch (error) {
       debug('Error in proxyMuralPayoutRequest:', error);
+      this.handleRateLimitError(error, response);
+    }
+  }
+
+  @authenticate('cognito')
+  @post('/mural/{accountIdentifier}/accounts/proxy/{organizationId}')
+  async proxyCreateMuralAccount(
+    @inject(RestBindings.Http.RESPONSE) response: Response,
+    @param.path.string('accountIdentifier') accountIdentifier: string,
+    @param.path.string('organizationId') organizationId: string,
+    @requestBody() data: MuralCreateAccountRequest,
+  ): Promise<MuralAccount> {
+    try {
+      // Use 'none' as a special value to indicate no organization ID
+      const orgId = organizationId === 'none' ? undefined : organizationId;
+      const muralProvider = await this.getMuralProvider(accountIdentifier);
+      return await muralProvider.createAccount(data.name, data.description, orgId);
+    } catch (error) {
+      debug('Error in proxyCreateMuralAccount:', error);
       this.handleRateLimitError(error, response);
     }
   }

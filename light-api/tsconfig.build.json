@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+
+  "compilerOptions": {
+    "outDir": "dist",
+
+    /* ─── override LoopBack defaults ─── */
+    "noEmit": false,
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    "incremental": false       /* ignore *.tsbuildinfo */,
+
+    "importHelpers": false          // ← NEW – inline helpers, no tslib
+  },
+
+  "include": ["src"]
+}

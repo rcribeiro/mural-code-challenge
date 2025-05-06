@@ -1,4 +1,4 @@
-import { SSM } from 'aws-sdk';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import debugFactory from 'debug';
 
 const debug = debugFactory('api-core:config');
@@ -44,15 +44,15 @@ export async function getConfig(): Promise<AppConfig> {
 
   try {
     debug(`Loading configuration from Parameter Store: ${process.env.CONFIG_PATH}`);
-    const ssm = new SSM({ region: process.env.REGION || 'us-east-1' });
+    const ssm = new SSMClient({ region: process.env.REGION || 'us-east-1' });
     
-    const response = await ssm.getParameter({
-      Name: process.env.CONFIG_PATH,
+    const { Parameter } = await ssm.send(new GetParameterCommand({
+      Name: process.env.CONFIG_PATH!,
       WithDecryption: true,
-    }).promise();
+    }));
     
-    if (response.Parameter?.Value) {
-      const loadedConfig = JSON.parse(response.Parameter.Value) as Partial<AppConfig>;
+    if (Parameter?.Value) {
+      const loadedConfig = JSON.parse(Parameter.Value) as Partial<AppConfig>;
       
       // Merge with defaults
       cachedConfig = {

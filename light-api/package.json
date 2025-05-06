@@ -12,8 +12,8 @@
     "node": "16 || 18 || 20 || 22"
   },
   "scripts": {
-    "build": "lb-tsc",
-    "package": "cp package.json dist/ && cd dist && npm install --production && zip -r ../lambda.zip .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "build:watch": "lb-tsc --watch",
     "lint": "yarn run eslint && yarn run prettier:check",
     "lint:fix": "yarn run eslint:fix && yarn run prettier:fix",
@@ -34,8 +34,8 @@
     "openapi-spec": "node ./dist/openapi-spec",
     "prestart": "yarn run rebuild",
     "start": "node -r source-map-support/register .",
-    "clean": "lb-clean dist *.tsbuildinfo .eslintcache",
-    "rebuild": "yarn run clean && yarn run build"
+    "clean": "rm -rf dist *.tsbuildinfo lambda*.zip",
+    "rebuild": "npm run clean && npm run build"
   },
   "repository": {
     "type": "git",
@@ -60,7 +60,10 @@
     "@loopback/service-proxy": "^6.1.5",
     "@types/aws-lambda": "^8.10.149",
     "@vendia/serverless-express": "^4.12.6",
-    "aws-sdk": "^2.1692.0",
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "@aws-sdk/client-ssm": "^3.470.0",
     "aws-serverless-express": "^3.4.0",
     "axios": "^1.9.0",
     "jsonwebtoken": "^9.0.2",
@@ -74,12 +77,8 @@
     "@loopback/testlab": "^6.1.5",
     "@types/aws-serverless-express": "^3.3.10",
     "@types/node": "^16.18.70",
-    "copy-webpack-plugin": "^11.0.0",
     "eslint": "^8.51.0",
     "source-map-support": "^0.5.21",
-    "typescript": "~5.2.2",
-    "webpack": "^5.99.7",
-    "webpack-cli": "^4.10.0",
-    "webpack-node-externals": "^3.0.0"
+    "typescript": "~5.2.2"
   }
 }

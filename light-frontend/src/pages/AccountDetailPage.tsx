@@ -103,7 +103,6 @@ const AccountDetailPage: React.FC = () => {
         
         // First, try to get all accounts for this customer
         const accountsResponse = await muralPayApi.getAllAccounts(accountIdentifier, customerId);
-        console.log('Accounts response:', accountsResponse.data);
         
         // Extract accounts array
         let accountsData: Account[] = [];
@@ -126,13 +125,11 @@ const AccountDetailPage: React.FC = () => {
         
         if (foundAccount) {
           setAccount(foundAccount);
-          console.log('Found account:', foundAccount);
         } else {
           // If not found in the list, try direct API call
           try {
             const accountResponse = await muralPayApi.getAccount(accountIdentifier, accountId, customerId);
             setAccount(accountResponse.data);
-            console.log('Direct account response:', accountResponse.data);
           } catch (accountErr: any) {
             console.error('Error fetching specific account:', accountErr);
             setError(`Failed to fetch account details: ${accountErr.message}`);
